@@ -117,15 +117,18 @@ services:
     build:
       context: ../
       dockerfile: hyperlane/user-emulator/Dockerfile
-    # TODO: 
-    # depends_on:
-    #   hyperlane-deployer:
-    #     condition: service_healthy
-    # environment:
-      # - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
+    # TODO: needs depends on?
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_APP_KEY=${DD_APP_KEY}
+      - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
+    volumes:
+      - hyperlane-deploy-artifacts:/deploy-artifacts
     networks:
       primev_net:
         ipv4_address: '172.29.0.171'
+    profiles:
+      - emulator
 
 networks:
   primev_net:

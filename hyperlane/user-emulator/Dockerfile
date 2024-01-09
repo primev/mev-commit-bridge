@@ -1,6 +1,6 @@
 FROM python:3.9-alpine
 
-RUN apk add --no-cache bash
+RUN apk add --no-cache bash jq
 
 RUN pip install datadog
 
