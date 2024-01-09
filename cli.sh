@@ -226,6 +226,12 @@ load_config() {
     fi
 }
 
+# Check for help command before loading config
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    show_usage
+    exit 0
+fi
+
 # If first arg is not "init", load configuration.
 if [[ "$1" != "init" ]]; then
     load_config
