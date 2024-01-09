@@ -29,6 +29,10 @@ Address:     `0x788EBABe5c3dD422Ef92Ca6714A69e2eabcE1Ee4`
 
 Address:     `0x0DCaa27B9E4Db92F820189345792f8eC5Ef148F6`
 
+## User emulator
+
+Address:     `0x04F713A0b687c84D4F66aCd1423712Af6F852B78`
+
 ## Starter .env file
 To get a standard starter .env file from primev internal development, [click here.](https://www.notion.so/Private-keys-and-env-for-settlement-layer-245a4f3f4fe040a7b72a6be91131d9c2?pvs=4)
 
@@ -39,6 +43,7 @@ HYPERLANE_DEPLOYER_PRIVATE_KEY=0xpk1
 NODE1_PRIVATE_KEY=0xpk2
 NODE2_PRIVATE_KEY=0xpk3
 RELAYER_PRIVATE_KEY=0xpk4
+EMULATOR_PRIVATE_KEY=0xpk5
 NEXT_PUBLIC_WALLET_CONNECT_ID=0xcId
 DD_API_KEY=432
 DD_APP_KEY=808

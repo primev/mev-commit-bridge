@@ -1,15 +1,14 @@
-FROM python:3.9-alpine
+FROM ghcr.io/foundry-rs/foundry:latest
 
-RUN apk add --no-cache bash jq
+RUN apk update && \
+    apk add bash jq python3 py3-pip
 
-RUN pip install datadog
+RUN pip3 install datadog
 
 COPY cli.sh /usr/local/bin/bridge-cli
 RUN chmod +x /usr/local/bin/bridge-cli
 
 COPY hyperlane/user-emulator/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-
-# TODO: DD keys
 
 ENTRYPOINT [ "/entrypoint.sh" ]

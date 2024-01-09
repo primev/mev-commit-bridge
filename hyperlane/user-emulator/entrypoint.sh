@@ -3,8 +3,6 @@ set -exu
 
 sleep 10
 
-# dog --help
-
 # Construct .dogrc file from env vars
 cat > /.dogrc <<EOF
 [Connection]
@@ -14,7 +12,15 @@ EOF
 
 echo ".dogrc file created successfully."
 
+# dog --help
+
 # dog --config /.dogrc metric post testjan8 100
+
+# Fail script if no warp deployment file is found
+if [ ! -f /deploy-artifacts/warp-deployment.json ]; then
+    echo "Error: warp-deployment.json not found. Please deploy bridge."
+    exit 1
+fi
 
 # Init bridge 
 SEPOLIA_ROUTER=$(cat /deploy-artifacts/warp-deployment.json | jq -r '.sepolia.router')
@@ -22,7 +28,23 @@ MEV_COMMIT_CHAIN_ROUTER=$(cat /deploy-artifacts/warp-deployment.json | jq -r '.m
 SEPOLIA_CHAIN_ID=11155111
 MEV_COMMIT_CHAIN_ID=17864
 SEPOLIA_URL=https://ethereum-sepolia.publicnode.com
-MEV_COMMIT_CHAIN_URL=${SETTLEMENT_RPC_URL}
+# MEV_COMMIT_CHAIN_URL=${SETTLEMENT_RPC_URL}
+MEV_COMMIT_CHAIN_URL="http://sl-bootnode:8545" # TODO: Use env var
+
+# Funded account for bridge testing
+EMULATOR_ADDRESS=0x04F713A0b687c84D4F66aCd1423712Af6F852B78
+
+# Ensure balances on both chains are above 1 ETH
+L1_BALANCE=$(printf '%d' "$(cast balance --rpc-url $SEPOLIA_URL $EMULATOR_ADDRESS)")
+MEV_COMMIT_BALANCE=$(printf '%d' "$(cast balance --rpc-url $MEV_COMMIT_CHAIN_URL $EMULATOR_ADDRESS)")
+if [ $L1_BALANCE -lt 1000000000000000000 ]; then
+    echo "$EMULATOR_ADDRESS must be funded with at least 1.0 ether on Sepolia."
+    exit 1
+fi
+if [ $MEV_COMMIT_BALANCE -lt 1000000000000000000 ]; then
+    echo "$EMULATOR_ADDRESS must be funded with at least 1.0 ether on mev-commit chain."
+    exit 1
+fi
 
 bridge-cli init \
     ${SEPOLIA_ROUTER} ${MEV_COMMIT_CHAIN_ROUTER} \
@@ -30,6 +52,8 @@ bridge-cli init \
     ${SEPOLIA_URL} ${MEV_COMMIT_CHAIN_URL} \
     --yes
 
-# bridge-cli --help
+# Bridge to self on mev-commit chain
+bridge-cli bridge-to-mev-commit 890 $EMULATOR_ADDRESS $EMULATOR_PRIVATE_KEY --yes
 
-# Bridge addr to use is 0x04F713A0b687c84D4F66aCd1423712Af6F852B78
+# Bridge back to L1. Account must be prefunded on mev-commit chain. 
+bridge-cli bridge-to-l1 890 $EMULATOR_ADDRESS $EMULATOR_PRIVATE_KEY --yes
