@@ -28,8 +28,7 @@ MEV_COMMIT_CHAIN_ROUTER=$(cat /deploy-artifacts/warp-deployment.json | jq -r '.m
 SEPOLIA_CHAIN_ID=11155111
 MEV_COMMIT_CHAIN_ID=17864
 SEPOLIA_URL=https://ethereum-sepolia.publicnode.com
-# MEV_COMMIT_CHAIN_URL=${SETTLEMENT_RPC_URL}
-MEV_COMMIT_CHAIN_URL="http://sl-bootnode:8545" # TODO: Use env var
+MEV_COMMIT_CHAIN_URL=${SETTLEMENT_RPC_URL}
 
 # Funded account for bridge testing
 EMULATOR_ADDRESS=0x04F713A0b687c84D4F66aCd1423712Af6F852B78
