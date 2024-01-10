@@ -58,4 +58,4 @@ bridge-cli init \
 bridge-cli bridge-to-mev-commit 890 $EMULATOR_ADDRESS $EMULATOR_PRIVATE_KEY --yes
 
 # Bridge back to L1. Account must be prefunded on mev-commit chain. 
-# bridge-cli bridge-to-l1 890 $EMULATOR_ADDRESS $EMULATOR_PRIVATE_KEY --yes
+bridge-cli bridge-to-l1 890 $EMULATOR_ADDRESS $EMULATOR_PRIVATE_KEY --yes
