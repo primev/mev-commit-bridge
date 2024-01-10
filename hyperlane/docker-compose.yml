@@ -90,28 +90,28 @@ services:
     profiles:
       - bridge
   
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_WALLET_CONNECT_ID=${NEXT_PUBLIC_WALLET_CONNECT_ID}
-    depends_on:
-      hyperlane-deployer:
-        condition: service_healthy
-    environment:
-      - NEXT_PUBLIC_WALLET_CONNECT_ID=${NEXT_PUBLIC_WALLET_CONNECT_ID}
-      - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
-      - PUBLIC_SETTLEMENT_RPC_URL=${PUBLIC_SETTLEMENT_RPC_URL}
-    networks:
-      primev_net:
-        ipv4_address: '172.29.0.90'
-    ports:
-      - 80:3000
-    volumes:
-      - hyperlane-deploy-artifacts:/deploy-artifacts
-    profiles:
-      - bridge
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #     args:
+  #       - NEXT_PUBLIC_WALLET_CONNECT_ID=${NEXT_PUBLIC_WALLET_CONNECT_ID}
+  #   depends_on:
+  #     hyperlane-deployer:
+  #       condition: service_healthy
+  #   environment:
+  #     - NEXT_PUBLIC_WALLET_CONNECT_ID=${NEXT_PUBLIC_WALLET_CONNECT_ID}
+  #     - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
+  #     - PUBLIC_SETTLEMENT_RPC_URL=${PUBLIC_SETTLEMENT_RPC_URL}
+  #   networks:
+  #     primev_net:
+  #       ipv4_address: '172.29.0.90'
+  #   ports:
+  #     - 80:3000
+  #   volumes:
+  #     - hyperlane-deploy-artifacts:/deploy-artifacts
+  #   profiles:
+  #     - bridge
   
   user-emulator:
     build:
