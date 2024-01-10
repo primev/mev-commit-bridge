@@ -9,6 +9,12 @@ up-prod:
 down:
 	AGENT_BASE_IMAGE=nil SETTLEMENT_RPC_URL=nil PUBLIC_SETTLEMENT_RPC_URL=nil docker compose --profile bridge down
 
+up-emulator:
+	AGENT_BASE_IMAGE=nil PUBLIC_SETTLEMENT_RPC_URL=nil SETTLEMENT_RPC_URL=http://sl-bootnode:8545 docker compose --profile emulator up -d --build
+
+down-emulator:
+	AGENT_BASE_IMAGE=nil PUBLIC_SETTLEMENT_RPC_URL=nil SETTLEMENT_RPC_URL=nil docker compose --profile emulator down
+
 clean-dbs:
 	@read -p "WARNING: This command will wipe all persistent disk data relevant to the containers. Press enter to continue or Ctrl+C to cancel." _ 
 	-docker compose --profile bridge down --rmi all --volumes

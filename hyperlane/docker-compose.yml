@@ -112,6 +112,23 @@ services:
       - hyperlane-deploy-artifacts:/deploy-artifacts
     profiles:
       - bridge
+  
+  user-emulator:
+    build:
+      context: ../
+      dockerfile: hyperlane/user-emulator/Dockerfile
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_APP_KEY=${DD_APP_KEY}
+      - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
+      - EMULATOR_PRIVATE_KEY=${EMULATOR_PRIVATE_KEY}
+    volumes:
+      - hyperlane-deploy-artifacts:/deploy-artifacts
+    networks:
+      primev_net:
+        ipv4_address: '172.29.0.171'
+    profiles:
+      - emulator
 
 networks:
   primev_net:
