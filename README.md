@@ -1,8 +1,14 @@
-# mev-commit bridge repo
+# Bridge to mev-commit chain
 
 This repository houses docker infra and cli tools for operating and interacting with a bridge between L1 ethereum and the mev-commit chain. The bridge is a [hyperlane warp route](https://docs.hyperlane.xyz/docs/protocol/warp-routes), with validators and a relayer operated by Primev.
 
 ## Bridge CLI
+
+The bridge cli is built out as a shell script that interacts with bridging contracts on both L1 and the mev-commit chain. The cli must first be initialized with relevant contract addresses, chain IDs, and RPC endpoints. The cli user can then bridge in either direction accordingly, to any destination account. `cli.sh` requires both [foundry](https://book.getfoundry.sh/getting-started/installation) and `jq` to be installed on the host. 
+
+We encourage anyone using the bridge cli to understand the underlying shell script they're executing. It's essentially a simple wrapper around some foundry commands that invoke bridging txes.
+
+### Quickstart
 
 To use the `cli.sh` in bridging ether to or from the mev-commit chain, first make the script executable:
 
