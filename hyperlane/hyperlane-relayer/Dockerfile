@@ -13,7 +13,7 @@ ENV CONFIG_FILES="/deploy-artifacts/agent-config.json"
 CMD ./relayer \
     --relayChains mevcommitsettlement,sepolia \
     --chains.mevcommitsettlement.connection.url ${SETTLEMENT_RPC_URL} \
-    --chains.sepolia.connection.url "https://eth-sepolia.g.alchemy.com/v2/a0wg_g1X-Wz4IeVA-0SS3PsQhbyQNjc_" \
+    --chains.sepolia.connection.url "https://sepolia.infura.io/v3/104a92cc9950435facd5cdab911b9778" \
     --db /relayer-db \
     --defaultSigner.key $RELAYER_PRIVATE_KEY \
     --allowLocalCheckpointSyncers true \

@@ -2,7 +2,7 @@
 
 ## Contract deployer
 
-Address:    `0xBcA333b67fb805aB18B4Eb7aa5a0B09aB25E5ce2`
+Address:    `0x82b941824b43F33e417be1E92273A3020a0D760c`
 
 Note if the relayer is emitting errors related to unexpected contract routing, try redeploying the hyperlane contracts using a new key pair. It's likely the current deployments are clashing with previous deployments on Sepolia.
 
