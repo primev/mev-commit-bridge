@@ -22,7 +22,7 @@ if [ ! -f /deploy-artifacts/warp-deployment.json ]; then
     exit 1
 fi
 
-# Init bridge 
+# Init bridge client
 SEPOLIA_ROUTER=$(cat /deploy-artifacts/warp-deployment.json | jq -r '.sepolia.router')
 MEV_COMMIT_CHAIN_ROUTER=$(cat /deploy-artifacts/warp-deployment.json | jq -r '.mevcommitsettlement.router')
 SEPOLIA_CHAIN_ID=11155111
