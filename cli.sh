@@ -23,7 +23,9 @@ show_usage() {
     echo "  -y, --yes   Automatically answer 'yes' to all prompts"
     echo "    Example: $0 bridge-to-mev-commit 100 0x123... 0xABC... -y"
     echo ""
+    echo "Note: This script requires foundry and jq to be installed."
 }
+
 
 bridge_confirmation() {
     if [ "$skip_confirmation" = false ]; then
@@ -128,9 +130,9 @@ bridge_transfer() {
     # Block until dest balance is incremented
     max_retries=30
     retry_count=0
-    while [ $(printf '%d' "$(cast balance --rpc-url "$dest_url" "$dest_address")") -eq $(printf '%d' "$dest_init_balance") ]
+    while [ "$(cast balance --rpc-url "$dest_url" "$dest_address")" = "$dest_init_balance" ]
     do
-        echo "Waiting for destination balance to increment..."
+        echo "Waiting for destination balance to change..."
         sleep 5
         retry_count=$((retry_count + 1))
         if [ "$retry_count" -ge "$max_retries" ]; then
