@@ -58,13 +58,12 @@ function bridge_and_post_metric() {
 
     if [ $exit_code -eq 0 ]; then
         echo "Bridged $AMOUNT to Chain $CHAIN_ID successfully."
-        BRIDGING_SUCCESS=1
+        dog --config /.dogrc metric post bridging.success 1 --tags="amount_bridged:$AMOUNT,to_chain_id:$CHAIN_ID"
     else
         echo "Failed to bridge $AMOUNT to Chain $CHAIN_ID."
-        BRIDGING_SUCCESS=0
+        # No need to post metric for failure, as script will likely exit prior. Just in case...
+        exit 1
     fi
-
-    dog --config /.dogrc metric post bridging.success $BRIDGING_SUCCESS --tags="amount_bridged:$AMOUNT,to_chain_id:$CHAIN_ID"
 }
 
 while true; do
