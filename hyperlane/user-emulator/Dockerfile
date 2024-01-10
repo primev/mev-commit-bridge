@@ -1,7 +1,7 @@
 FROM ghcr.io/foundry-rs/foundry:latest
 
 RUN apk update && \
-    apk add bash jq python3 py3-pip
+    apk add bash jq python3 py3-pip bc
 
 RUN pip3 install datadog
 

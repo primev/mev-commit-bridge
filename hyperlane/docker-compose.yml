@@ -122,6 +122,7 @@ services:
       - DD_API_KEY=${DD_API_KEY}
       - DD_APP_KEY=${DD_APP_KEY}
       - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
+      - EMULATOR_PRIVATE_KEY=${EMULATOR_PRIVATE_KEY}
     volumes:
       - hyperlane-deploy-artifacts:/deploy-artifacts
     networks:
