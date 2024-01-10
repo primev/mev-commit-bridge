@@ -12,8 +12,8 @@ EOF
 
 echo ".dogrc file created successfully."
 
+# TODO: incorperate metric posting and continuous briding
 # dog --help
-
 # dog --config /.dogrc metric post testjan8 100
 
 # Fail script if no warp deployment file is found
@@ -45,7 +45,6 @@ if [ "$(echo "$MEV_COMMIT_BALANCE < $MIN_BALANCE" | bc)" -eq 1 ]; then
     echo "$EMULATOR_ADDRESS must be funded with at least 1.0 ether on mev-commit chain."
     exit 1
 fi
-
 
 bridge-cli init \
     ${SEPOLIA_ROUTER} ${MEV_COMMIT_CHAIN_ROUTER} \
