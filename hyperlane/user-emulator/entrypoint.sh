@@ -58,8 +58,7 @@ function bridge_and_post_metric() {
         dog --config /.dogrc metric post bridging.success 1 --tags="account_addr:$EMULATOR_ADDRESS,to_chain_id:$CHAIN_ID"
     else
         echo "Failed to bridge $AMOUNT to Chain $CHAIN_ID."
-        # No need to post metric for failure, as script will likely exit prior. Just in case...
-        exit 1
+        dog --config /.dogrc metric post bridging.failure 1 --tags="account_addr:$EMULATOR_ADDRESS,to_chain_id:$CHAIN_ID"
     fi
 }
 
