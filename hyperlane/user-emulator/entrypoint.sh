@@ -50,18 +50,20 @@ function bridge_and_post_metric() {
     CHAIN_ID=$2
     AMOUNT=$3
 
-    bridge-cli $SUB_CMD $AMOUNT $EMULATOR_ADDRESS $EMULATOR_PRIVATE_KEY --yes
-    exit_code=$?
+    output=$(bridge-cli $SUB_CMD $AMOUNT $EMULATOR_ADDRESS $EMULATOR_PRIVATE_KEY --yes 2>&1)
 
-    if [ $exit_code -eq 0 ]; then
-        echo "Bridged $AMOUNT to Chain $CHAIN_ID successfully."
+    if echo "$output" | grep -q "SUCCESS"; then
+        echo "Bridged $AMOUNT ether to Chain $CHAIN_ID successfully."
         dog --config /.dogrc metric post bridging.success 1 --tags="account_addr:$EMULATOR_ADDRESS,to_chain_id:$CHAIN_ID"
+    elif echo "$output" | grep -q "FAILURE"; then
+        echo "Failed to bridge $AMOUNT ether to Chain $CHAIN_ID."
+        dog --config /.dogrc metric post bridging.failure 1 --tags="account_addr:$EMULATOR_ADDRESS,to_chain_id:$CHAIN_ID"
     else
-        echo "Failed to bridge $AMOUNT to Chain $CHAIN_ID."
-        # No need to post metric for failure, as script will likely exit prior. Just in case...
+        echo "Unknown bridge result: $output"
         exit 1
     fi
 }
+
 
 while true; do
     # Generate a random amount between 0 and 10000 wei
