@@ -137,10 +137,12 @@ bridge_transfer() {
         retry_count=$((retry_count + 1))
         if [ "$retry_count" -ge "$max_retries" ]; then
             echo "Maximum retries reached. 10 minutes have passed and destination balance has not changed."
-            return 1
+            echo "FAILURE"
+            return 0
         fi
     done
     echo "Bridge operation completed successfully."
+    echo "SUCCESS"
     return 0
 }
 
