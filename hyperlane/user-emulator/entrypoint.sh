@@ -65,11 +65,13 @@ function bridge_and_post_metric() {
         echo "Unknown bridge result: $output"
         exit 1
     fi
+    echo "Elapsed time: $elapsed_time"
+    echo "Metric posted at: $(date)"
 }
 
 while true; do
-    # Generate a random amount between 0 and 10000 wei
-    RANDOM_AMOUNT=$(( (RANDOM % 10001) ))
+    # Generate a random amount between 0 and 1,000,000,000,000 wei
+    RANDOM_AMOUNT=$(( RANDOM % 1000000000001 ))
 
     bridge_and_post_metric "bridge-to-mev-commit" $MEV_COMMIT_CHAIN_ID $RANDOM_AMOUNT
     bridge_and_post_metric "bridge-to-l1" $SEPOLIA_CHAIN_ID $RANDOM_AMOUNT
