@@ -53,10 +53,10 @@ function bridge_and_post_metric() {
     output=$(bridge-cli $SUB_CMD $AMOUNT $EMULATOR_ADDRESS $EMULATOR_PRIVATE_KEY --yes 2>&1)
 
     if echo "$output" | grep -q "SUCCESS"; then
-        echo "Bridged $AMOUNT to Chain $CHAIN_ID successfully."
+        echo "Bridged $AMOUNT ether to Chain $CHAIN_ID successfully."
         dog --config /.dogrc metric post bridging.success 1 --tags="account_addr:$EMULATOR_ADDRESS,to_chain_id:$CHAIN_ID"
     elif echo "$output" | grep -q "FAILURE"; then
-        echo "Failed to bridge $AMOUNT to Chain $CHAIN_ID."
+        echo "Failed to bridge $AMOUNT ether to Chain $CHAIN_ID."
         dog --config /.dogrc metric post bridging.failure 1 --tags="account_addr:$EMULATOR_ADDRESS,to_chain_id:$CHAIN_ID"
     else
         echo "Unknown bridge result: $output"
