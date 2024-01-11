@@ -128,15 +128,15 @@ bridge_transfer() {
         --value $total_amount_dec"wei"
 
     # Block until dest balance is incremented
-    max_retries=30
+    max_retries=60
     retry_count=0
     while [ "$(cast balance --rpc-url "$dest_url" "$dest_address")" = "$dest_init_balance" ]
     do
         echo "Waiting for destination balance to change..."
-        sleep 5
+        sleep 10
         retry_count=$((retry_count + 1))
         if [ "$retry_count" -ge "$max_retries" ]; then
-            echo "Maximum retries reached"
+            echo "Maximum retries reached. 10 minutes have passed and destination balance has not changed."
             exit 1
         fi
     done
