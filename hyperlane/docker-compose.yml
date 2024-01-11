@@ -113,7 +113,7 @@ services:
   #   profiles:
   #     - bridge
   
-  user-emulator:
+  emulator1:
     build:
       context: ../
       dockerfile: hyperlane/user-emulator/Dockerfile
@@ -121,12 +121,85 @@ services:
       - DD_API_KEY=${DD_API_KEY}
       - DD_APP_KEY=${DD_APP_KEY}
       - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
-      - EMULATOR_PRIVATE_KEY=${EMULATOR_PRIVATE_KEY}
+      - EMULATOR_PRIVATE_KEY=${EMULATOR1_PRIVATE_KEY}
+      - EMULATOR_ADDRESS=0x04F713A0b687c84D4F66aCd1423712Af6F852B78
     volumes:
       - hyperlane-deploy-artifacts:/deploy-artifacts
     networks:
       primev_net:
         ipv4_address: '172.29.0.171'
+    profiles:
+      - emulator
+    
+  emulator2:
+    build:
+      context: ../
+      dockerfile: hyperlane/user-emulator/Dockerfile
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_APP_KEY=${DD_APP_KEY}
+      - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
+      - EMULATOR_PRIVATE_KEY=${EMULATOR2_PRIVATE_KEY}
+      - EMULATOR_ADDRESS=0x4E2D04c65C399Eb27B3E3ADA06110BCd47b5a506
+    volumes:
+      - hyperlane-deploy-artifacts:/deploy-artifacts
+    networks:
+      primev_net:
+        ipv4_address: '172.29.0.172'
+    profiles:
+      - emulator
+
+  emulator3:
+    build:
+      context: ../
+      dockerfile: hyperlane/user-emulator/Dockerfile
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_APP_KEY=${DD_APP_KEY}
+      - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
+      - EMULATOR_PRIVATE_KEY=${EMULATOR3_PRIVATE_KEY}
+      - EMULATOR_ADDRESS=0x7AEe7AD6b2EAd96532D84D20358Db0e697f060Cd
+    volumes:
+      - hyperlane-deploy-artifacts:/deploy-artifacts
+    networks:
+      primev_net:
+        ipv4_address: '172.29.0.173'
+    profiles:
+      - emulator
+  
+  emulator4:
+    build:
+      context: ../
+      dockerfile: hyperlane/user-emulator/Dockerfile
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_APP_KEY=${DD_APP_KEY}
+      - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
+      - EMULATOR_PRIVATE_KEY=${EMULATOR4_PRIVATE_KEY}
+      - EMULATOR_ADDRESS=0x765235CDda5FC6a620Fea2208A333a97CEDA2E1d
+    volumes:
+      - hyperlane-deploy-artifacts:/deploy-artifacts
+    networks:
+      primev_net:
+        ipv4_address: '172.29.0.174'
+    profiles:
+      - emulator
+  
+  emulator5:
+    build:
+      context: ../
+      dockerfile: hyperlane/user-emulator/Dockerfile
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_APP_KEY=${DD_APP_KEY}
+      - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
+      - EMULATOR_PRIVATE_KEY=${EMULATOR5_PRIVATE_KEY}
+      - EMULATOR_ADDRESS=0x163c7bD4C3B815B06503D8E8B5906519C319EA6f
+    volumes:
+      - hyperlane-deploy-artifacts:/deploy-artifacts
+    networks:
+      primev_net:
+        ipv4_address: '172.29.0.175'
     profiles:
       - emulator
 
