@@ -26,9 +26,6 @@ MEV_COMMIT_CHAIN_ID=17864
 SEPOLIA_URL=https://ethereum-sepolia.publicnode.com
 MEV_COMMIT_CHAIN_URL=${SETTLEMENT_RPC_URL}
 
-# Funded account for bridge testing
-EMULATOR_ADDRESS=0x04F713A0b687c84D4F66aCd1423712Af6F852B78
-
 # Ensure balances on both chains are above 1 ETH
 L1_BALANCE=$(cast balance --rpc-url $SEPOLIA_URL $EMULATOR_ADDRESS)
 MEV_COMMIT_BALANCE=$(cast balance --rpc-url $MEV_COMMIT_CHAIN_URL $EMULATOR_ADDRESS)
@@ -58,7 +55,7 @@ function bridge_and_post_metric() {
 
     if [ $exit_code -eq 0 ]; then
         echo "Bridged $AMOUNT to Chain $CHAIN_ID successfully."
-        dog --config /.dogrc metric post bridging.success 1 --tags="amount_bridged:$AMOUNT,to_chain_id:$CHAIN_ID"
+        dog --config /.dogrc metric post bridging.success 1 --tags="account_addr:$EMULATOR_ADDRESS,to_chain_id:$CHAIN_ID"
     else
         echo "Failed to bridge $AMOUNT to Chain $CHAIN_ID."
         # No need to post metric for failure, as script will likely exit prior. Just in case...
