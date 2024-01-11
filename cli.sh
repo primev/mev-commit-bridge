@@ -83,7 +83,7 @@ bridge_transfer() {
 
     if ! [[ $amount =~ ^[0-9]+$ ]]; then
         echo "Error: Amount of wei is not a valid number."
-        return 1
+        exit 1
     fi
 
     bridge_confirmation \
@@ -137,11 +137,11 @@ bridge_transfer() {
         retry_count=$((retry_count + 1))
         if [ "$retry_count" -ge "$max_retries" ]; then
             echo "Maximum retries reached. 10 minutes have passed and destination balance has not changed."
-            exit 1
+            return 1
         fi
     done
     echo "Bridge operation completed successfully."
-    exit 0
+    return 0
 }
 
 bridge_to_mev_commit() {
