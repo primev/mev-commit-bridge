@@ -129,7 +129,11 @@ services:
       primev_net:
         ipv4_address: '172.29.0.171'
     profiles:
-      - emulator
+      - 1-emulators
+      - 2-emulators
+      - 3-emulators
+      - 4-emulators
+      - 5-emulators
     
   emulator2:
     build:
@@ -147,7 +151,10 @@ services:
       primev_net:
         ipv4_address: '172.29.0.172'
     profiles:
-      - emulator
+      - 2-emulators
+      - 3-emulators
+      - 4-emulators
+      - 5-emulators
 
   emulator3:
     build:
@@ -165,7 +172,9 @@ services:
       primev_net:
         ipv4_address: '172.29.0.173'
     profiles:
-      - emulator
+      - 3-emulators
+      - 4-emulators
+      - 5-emulators
   
   emulator4:
     build:
@@ -183,7 +192,8 @@ services:
       primev_net:
         ipv4_address: '172.29.0.174'
     profiles:
-      - emulator
+      - 4-emulators
+      - 5-emulators
   
   emulator5:
     build:
@@ -201,7 +211,7 @@ services:
       primev_net:
         ipv4_address: '172.29.0.175'
     profiles:
-      - emulator
+      - 5-emulators
 
 networks:
   primev_net:

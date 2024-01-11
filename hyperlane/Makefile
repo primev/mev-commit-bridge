@@ -10,10 +10,22 @@ down:
 	AGENT_BASE_IMAGE=nil SETTLEMENT_RPC_URL=nil PUBLIC_SETTLEMENT_RPC_URL=nil docker compose --profile bridge down
 
 up-emulator:
-	AGENT_BASE_IMAGE=nil PUBLIC_SETTLEMENT_RPC_URL=nil SETTLEMENT_RPC_URL=http://sl-bootnode:8545 docker compose --profile emulator up -d --build
+	AGENT_BASE_IMAGE=nil PUBLIC_SETTLEMENT_RPC_URL=nil SETTLEMENT_RPC_URL=http://sl-bootnode:8545 docker compose --profile 1-emulators up -d --build
+
+up-2emulator:
+	AGENT_BASE_IMAGE=nil PUBLIC_SETTLEMENT_RPC_URL=nil SETTLEMENT_RPC_URL=http://sl-bootnode:8545 docker compose --profile 2-emulators up -d --build
+
+up-3emulator:
+	AGENT_BASE_IMAGE=nil PUBLIC_SETTLEMENT_RPC_URL=nil SETTLEMENT_RPC_URL=http://sl-bootnode:8545 docker compose --profile 3-emulators up -d --build
+
+up-4emulator:
+	AGENT_BASE_IMAGE=nil PUBLIC_SETTLEMENT_RPC_URL=nil SETTLEMENT_RPC_URL=http://sl-bootnode:8545 docker compose --profile 4-emulators up -d --build
+
+up-5emulator:
+	AGENT_BASE_IMAGE=nil PUBLIC_SETTLEMENT_RPC_URL=nil SETTLEMENT_RPC_URL=http://sl-bootnode:8545 docker compose --profile 5-emulators up -d --build
 
 down-emulator:
-	AGENT_BASE_IMAGE=nil PUBLIC_SETTLEMENT_RPC_URL=nil SETTLEMENT_RPC_URL=nil docker compose --profile emulator down
+	AGENT_BASE_IMAGE=nil PUBLIC_SETTLEMENT_RPC_URL=nil SETTLEMENT_RPC_URL=nil docker compose --profile 5-emulators down
 
 clean-dbs:
 	@read -p "WARNING: This command will wipe all persistent disk data relevant to the containers. Press enter to continue or Ctrl+C to cancel." _ 
