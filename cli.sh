@@ -128,7 +128,7 @@ bridge_transfer() {
         --value $total_amount_dec"wei"
 
     # Block until dest balance is incremented
-    max_retries=60
+    max_retries=180 # Timeout after 30 minutes
     retry_count=0
     timeout=false
     while [ "$(cast balance --rpc-url "$dest_url" "$dest_address")" = "$dest_init_balance" ]
@@ -137,7 +137,7 @@ bridge_transfer() {
         sleep 10
         retry_count=$((retry_count + 1))
         if [ "$retry_count" -ge "$max_retries" ]; then
-            echo "Maximum retries reached. 10 minutes have passed and destination balance has not changed."
+            echo "Maximum retries reached. 30 minutes have passed and destination balance has not changed."
             timeout=true
             echo "FAILURE"
             break
@@ -147,7 +147,6 @@ bridge_transfer() {
         echo "Destination balance has changed. Bridge operation successful."
         echo "SUCCESS"
     fi 
-    # exit 0
 }
 
 bridge_to_mev_commit() {
