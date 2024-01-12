@@ -118,7 +118,7 @@ bridge_transfer() {
 
     dest_account_init_balance=$(cast balance --rpc-url $dest_url $dest_address)
 
-    src_address=$(cast wallet address --rpc-url $source_url $private_key)
+    src_address=$(cast wallet address $private_key)
     src_account_init_balance=$(cast balance --rpc-url $source_url $src_address)
 
     # TODO: Tune transaction parameters and/or allow for user to inject custom config with sourced env vars.
