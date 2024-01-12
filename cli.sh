@@ -158,7 +158,6 @@ bridge_transfer() {
     max_retries=60
     sleep_time=10
     retry_count=0
-    # timeout=false
     while [ "$(cast balance --rpc-url "$source_url" "$src_address")" = "$src_account_init_balance" ]
     do 
         echo "$((retry_count * 10)) seconds passed since bridge invocation. Waiting for source balance to change..."
@@ -166,10 +165,8 @@ bridge_transfer() {
         retry_count=$((retry_count + 1))
         if [ "$retry_count" -ge "$max_retries" ]; then
             echo "Maximum retries reached. 30 minutes have passed and source balance has not changed."
-            # timeout=true
             echo "EXPIRED"
             # TODO: If expired, cancel tx here
-            # break
             return 0
         fi
     done
@@ -178,7 +175,6 @@ bridge_transfer() {
     max_retries=180
     sleep_time=10
     retry_count=0
-    # timeout=false
     while [ "$(cast balance --rpc-url "$dest_url" "$dest_address")" = "$dest_account_init_balance" ]
     do
         echo "$((retry_count * 10)) seconds passed since bridge invocation. Waiting for destination balance to change..."
@@ -186,17 +182,15 @@ bridge_transfer() {
         retry_count=$((retry_count + 1))
         if [ "$retry_count" -ge "$max_retries" ]; then
             echo "Maximum retries reached. 30 minutes have passed and destination balance has not changed."
-            # timeout=true
             echo "FAILURE"
-            # break
             return 0
         fi
     done
-    # if [ "$timeout" = false ]; then
-    echo "Destination balance has changed. Bridge operation successful."
+
+    echo "Source and destination balances have changed. Bridge operation successful."
     echo "If in production, confirm destination balance was not incremented by irrelevant transaction."
     echo "SUCCESS"
-    # fi 
+    return 0
 }
 
 bridge_to_mev_commit() {
