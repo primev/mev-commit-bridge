@@ -130,8 +130,8 @@ bridge_transfer() {
         $dest_chain_id \
         $padded_dest_address \
         $amount \
-        --value $total_amount_dec"wei" \
-        # --nonce 380
+        --value $total_amount_dec"wei"
+        # --nonce 366
 
     # After tx is sent on src chain, a simple FSM ensues. Bridge invocation follows:
     #
