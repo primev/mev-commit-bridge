@@ -133,7 +133,7 @@ bridge_transfer() {
         --value $total_amount_dec"wei"
         # --nonce 366
 
-    # After tx is sent on src chain, a simple FSM ensues. Bridge invocation follows:
+    # After tx is submitted to src chain, a simple FSM ensues. Bridge invocation follows:
     #
     # [PENDING] -- Timeout --> [EXPIRED]
     #    |
