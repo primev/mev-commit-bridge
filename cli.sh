@@ -152,10 +152,10 @@ bridge_transfer() {
     # Success: destination balance incremented, bridge invocation complete
 
     # Iterate until source balance changes. Timeout after 30 minutes. 
-    # TODO: Use transaction receipt instead of balance polling
     max_retries=180
     sleep_time=10
     retry_count=0
+    # TODO: Use transaction receipt instead of balance polling
     while [ "$(cast balance --rpc-url "$source_url" "$src_address")" = "$src_account_init_balance" ]
     do 
         echo "$((retry_count * 10)) seconds passed since bridge invocation. Waiting for source balance to change..."
