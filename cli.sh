@@ -151,8 +151,6 @@ bridge_transfer() {
     # Failure: tx has been committed to source chain, 30 minute timeout has elapsed
     # Success: destination balance incremented, bridge invocation complete
 
-    # TODO: implement above FSM
-
     # Iterate until source balance changes. Timeout after 10 minutes. 
     # TODO: Use transaction receipt instead of balance polling
     max_retries=60
