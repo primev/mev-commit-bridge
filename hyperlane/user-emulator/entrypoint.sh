@@ -1,6 +1,5 @@
 #!/bin/sh
-set -exu
-# TODO: rm debug
+set -eu
 
 sleep 10
 
