@@ -108,8 +108,6 @@ bridge_transfer() {
     echo "$source_chain_name URL: $source_url"
     echo "$dest_chain_name URL: $dest_url"
 
-    dest_init_balance=$(cast balance --rpc-url $dest_url $dest_address)
-
     local dest_address_clean=${dest_address#0x} # Remove prefix
     local padded_dest_address="0x000000000000000000000000$dest_address_clean"
 
@@ -118,6 +116,13 @@ bridge_transfer() {
     local gas_payment_dec=$((16#$gas_payment_hex_clean))
     local total_amount_dec=$(($amount + $gas_payment_dec))
 
+    dest_account_init_balance=$(cast balance --rpc-url $dest_url $dest_address)
+
+    src_address=$(cast wallet address $private_key)
+    src_account_init_balance=$(cast balance --rpc-url $source_url $src_address)
+
+    # TODO: Tune transaction parameters and/or allow for user to inject custom config with sourced env vars.
+    # See https://book.getfoundry.sh/reference/cli/cast/send
     cast send \
         --rpc-url $source_url \
         --private-key $private_key \
@@ -126,27 +131,64 @@ bridge_transfer() {
         $padded_dest_address \
         $amount \
         --value $total_amount_dec"wei"
+        # --nonce 366
 
-    # Block until dest balance is incremented
-    max_retries=180 # Timeout after 30 minutes
+    # After tx is submitted to src chain, a simple FSM ensues. Bridge invocation follows:
+    #
+    # [PENDING] -- Timeout --> [EXPIRED]
+    #    |
+    #    | tx committed to source chain
+    #    |
+    # [COMMITTED] -- Timeout --> [FAILURE]
+    #    |
+    #    | balance incremented (tx committed to dest chain)
+    #    v
+    # [SUCCESS]
+    #
+    # Pending: tx has been submitted to source chain, but is still pending (src balance not decremented)
+    # Expired: 30 minute timeout has been reached while source chain tx is still pending
+    # Committed: tx has been committed to source chain, 30 minute timeout is NOT reached
+    # Failure: tx has been committed to source chain, 30 minute timeout has elapsed
+    # Success: destination balance incremented, bridge invocation complete
+
+    # Iterate until source balance changes. Timeout after 30 minutes. 
+    max_retries=180
+    sleep_time=10
     retry_count=0
-    timeout=false
-    while [ "$(cast balance --rpc-url "$dest_url" "$dest_address")" = "$dest_init_balance" ]
+    # TODO: Use transaction receipt instead of balance polling
+    while [ "$(cast balance --rpc-url "$source_url" "$src_address")" = "$src_account_init_balance" ]
+    do 
+        echo "$((retry_count * 10)) seconds passed since bridge invocation. Waiting for source balance to change..."
+        sleep $sleep_time
+        retry_count=$((retry_count + 1))
+        if [ "$retry_count" -ge "$max_retries" ]; then
+            echo "Maximum retries reached. 30 minutes have passed and source balance has not changed."
+            echo "EXPIRED"
+            # TODO: If expired, cancel tx here
+            return 0
+        fi
+    done
+
+    # Iterate until destination balance changes. Timeout after 30 minutes.
+    max_retries=180
+    sleep_time=10
+    retry_count=0
+    while [ "$(cast balance --rpc-url "$dest_url" "$dest_address")" = "$dest_account_init_balance" ]
     do
         echo "$((retry_count * 10)) seconds passed since bridge invocation. Waiting for destination balance to change..."
-        sleep 10
+        sleep $sleep_time
         retry_count=$((retry_count + 1))
         if [ "$retry_count" -ge "$max_retries" ]; then
             echo "Maximum retries reached. 30 minutes have passed and destination balance has not changed."
-            timeout=true
             echo "FAILURE"
-            break
+            return 0
         fi
     done
-    if [ "$timeout" = false ]; then
-        echo "Destination balance has changed. Bridge operation successful."
-        echo "SUCCESS"
-    fi 
+
+    echo "Source and destination balances have changed. Bridge operation successful."
+    echo "If in production, confirm destination balance was not incremented by irrelevant transaction."
+    echo "SUCCESS"
+    return 0
 }
 
 bridge_to_mev_commit() {

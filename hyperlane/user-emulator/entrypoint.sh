@@ -61,6 +61,9 @@ function bridge_and_post_metric() {
     elif echo "$output" | grep -q "FAILURE"; then
         echo "Failed to bridge $AMOUNT ether to Chain $CHAIN_ID."
         dog --config /.dogrc metric post bridging.failure $elapsed_time --tags="account_addr:$EMULATOR_ADDRESS,to_chain_id:$CHAIN_ID"
+    elif echo "$output" | grep -q "EXPIRED"; then
+        echo "Failed to bridge $AMOUNT ether to Chain $CHAIN_ID, source transaction is stuck pending."
+        dog --config /.dogrc metric post bridging.expired $elapsed_time --tags="account_addr:$EMULATOR_ADDRESS,to_chain_id:$CHAIN_ID"
     else
         echo "Unknown bridge result: $output"
         exit 1
