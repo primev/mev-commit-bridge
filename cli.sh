@@ -121,6 +121,10 @@ bridge_transfer() {
     src_address=$(cast wallet address $private_key)
     src_account_init_balance=$(cast balance --rpc-url $source_url $src_address)
 
+    # Does specifying values explicitly help?
+    nonce=$(cast nonce --rpc-url $source_url $src_address)
+    gas_price=$(cast gas-price --rpc-url $source_url)
+
     # TODO: Tune transaction parameters and/or allow for user to inject custom config with sourced env vars.
     # See https://book.getfoundry.sh/reference/cli/cast/send
     cast send \
@@ -130,8 +134,10 @@ bridge_transfer() {
         $dest_chain_id \
         $padded_dest_address \
         $amount \
-        --value $total_amount_dec"wei"
-        # --nonce 366
+        --value $total_amount_dec"wei" \
+        --nonce $nonce \
+        --gas-price $gas_price
+        # --priority-gas-price 
 
     # After tx is submitted to src chain, a simple FSM ensues. Bridge invocation follows:
     #
@@ -164,7 +170,21 @@ bridge_transfer() {
         if [ "$retry_count" -ge "$max_retries" ]; then
             echo "Maximum retries reached. 30 minutes have passed and source balance has not changed."
             echo "EXPIRED"
-            # TODO: If expired, cancel tx here
+
+            # Try to cancel the transaction with 0 value transfer to self
+            nonce=$(cast nonce --rpc-url $source_url $src_address)
+            gas_price=$(cast gas-price --rpc-url $source_url)
+            # add 10% to previously used gas price
+            gas_price=$(printf "%.0f" $(echo "$gas_price * 1.11" | bc))
+            cast send \
+                --rpc-url $source_url \
+                --private-key $private_key \
+                --value 0 \
+                --gas-price $gas_price \
+                --nonce $nonce \
+                $src_address
+                # --priority-gas-price 99000000000 \
+
             return 0
         fi
     done
