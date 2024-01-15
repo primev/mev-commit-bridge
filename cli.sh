@@ -169,7 +169,6 @@ bridge_transfer() {
         retry_count=$((retry_count + 1))
         if [ "$retry_count" -ge "$max_retries" ]; then
             echo "Maximum retries reached. 30 minutes have passed and source balance has not changed."
-            echo "EXPIRED"
 
             # Try to cancel the transaction with 0 value transfer to self
             nonce=$(cast nonce --rpc-url $source_url $src_address)
@@ -185,6 +184,7 @@ bridge_transfer() {
                 $src_address
                 # --priority-gas-price 99000000000 \
 
+            echo "EXPIRED"
             return 0
         fi
     done
