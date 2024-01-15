@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+set -ex
+# TODO: rm debug
 
 config_file=".bridge_config"
 
