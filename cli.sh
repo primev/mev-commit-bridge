@@ -173,7 +173,7 @@ bridge_transfer() {
             # Try to cancel the transaction with 0 value transfer to self
             nonce=$(cast nonce --rpc-url $source_url $src_address)
             gas_price=$(cast gas-price --rpc-url $source_url)
-            # add 10% to previously used gas price
+            # add just above 10% to previously used gas price
             gas_price=$(printf "%.0f" $(echo "$gas_price * 1.11" | bc))
             cast send \
                 --rpc-url $source_url \
