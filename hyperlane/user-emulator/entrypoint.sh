@@ -23,7 +23,7 @@ SEPOLIA_ROUTER=$(cat /deploy-artifacts/warp-deployment.json | jq -r '.sepolia.ro
 MEV_COMMIT_CHAIN_ROUTER=$(cat /deploy-artifacts/warp-deployment.json | jq -r '.mevcommitsettlement.router')
 SEPOLIA_CHAIN_ID=11155111
 MEV_COMMIT_CHAIN_ID=17864
-SEPOLIA_URL=https://ethereum-sepolia.publicnode.com
+SEPOLIA_URL=${SEPOLIA_RPC_URL}
 MEV_COMMIT_CHAIN_URL=${SETTLEMENT_RPC_URL}
 
 # Ensure balances on both chains are above 1 ETH
