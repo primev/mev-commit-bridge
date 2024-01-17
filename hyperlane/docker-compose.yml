@@ -74,14 +74,14 @@ services:
       dockerfile: Dockerfile
       args:
         - AGENT_BASE_IMAGE=${AGENT_BASE_IMAGE}
-        - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
-        - SEPOLIA_RPC_URL=${SEPOLIA_RPC_URL}
     user: "0:0"
     depends_on:
       hyperlane-deployer:
         condition: service_healthy
     environment:
       - RELAYER_PRIVATE_KEY=${RELAYER_PRIVATE_KEY}
+      - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
+      - SEPOLIA_RPC_URL=${SEPOLIA_RPC_URL}
     networks:
       primev_net:
         ipv4_address: '172.29.0.77'
