@@ -44,7 +44,7 @@ Emulator 5 Address: `0x163c7bD4C3B815B06503D8E8B5906519C319EA6f`
 ## Starter .env file
 To get a standard starter .env file from primev internal development, [click here.](https://www.notion.so/Private-keys-and-env-for-settlement-layer-245a4f3f4fe040a7b72a6be91131d9c2?pvs=4). Note this repo is being actively developed and required .env variables may change.
 
-Your .env file should look like:
+Environment variables that must be specified in the .env file or as command line arguments:
 
 ```
 HYPERLANE_DEPLOYER_PRIVATE_KEY=0xpk1
@@ -52,6 +52,10 @@ NODE1_PRIVATE_KEY=0xpk2
 NODE2_PRIVATE_KEY=0xpk3
 RELAYER_PRIVATE_KEY=0xpk4
 NEXT_PUBLIC_WALLET_CONNECT_ID=0xcId
+AGENT_BASE_IMAGE=image
+SETTLEMENT_RPC_URL=https://url
+PUBLIC_SETTLEMENT_RPC_URL=https://url
+SEPOLIA_RPC_URL=https://url
 DD_API_KEY=432
 DD_APP_KEY=808
 EMULATOR1_PRIVATE_KEY=0xpk5
