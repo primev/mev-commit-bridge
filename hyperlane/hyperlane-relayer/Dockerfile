@@ -1,5 +1,6 @@
 ARG AGENT_BASE_IMAGE
 ARG SETTLEMENT_RPC_URL
+ARG SEPOLIA_RPC_URL
 FROM ${AGENT_BASE_IMAGE}
 
 # Relayer config, see: 
@@ -13,7 +14,7 @@ ENV CONFIG_FILES="/deploy-artifacts/agent-config.json"
 CMD ./relayer \
     --relayChains mevcommitsettlement,sepolia \
     --chains.mevcommitsettlement.connection.url ${SETTLEMENT_RPC_URL} \
-    --chains.sepolia.connection.url "https://sepolia.infura.io/v3/104a92cc9950435facd5cdab911b9778" \
+    --chains.sepolia.connection.url ${SEPOLIA_RPC_URL} \
     --db /relayer-db \
     --defaultSigner.key $RELAYER_PRIVATE_KEY \
     --allowLocalCheckpointSyncers true \
