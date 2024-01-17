@@ -10,6 +10,7 @@ services:
       retries: 100
     environment:
       - HYPERLANE_DEPLOYER_PRIVATE_KEY=${HYPERLANE_DEPLOYER_PRIVATE_KEY}
+      - SEPOLIA_RPC_URL=${SEPOLIA_RPC_URL}
     networks:
       primev_net:
         ipv4_address: '172.29.0.50'

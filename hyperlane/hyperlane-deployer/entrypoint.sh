@@ -4,6 +4,9 @@ set -exu
 # Sleep to ensure chain is up
 sleep 10
 
+# Replace default rpc url in chain config with env var
+sed -i "s|http: https://ethereum-sepolia.publicnode.com|${SEPOLIA_RPC_URL}|g" /chain-config.yml
+
 if test -f /hyperlane-monorepo/artifacts/done; then
   echo "Deploy artifacts already exist. Skipping deployment."
 else
