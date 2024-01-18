@@ -1,5 +1,13 @@
 # Hyperlane Warp Route Bridge
 
+## Versions
+
+Agents are built from [this image](https://console.cloud.google.com/gcr/images/abacus-labs-dev/global/hyperlane-agent@sha256:854f92966eac6b49e5132e152cc58168ecdddc76c2d390e657b81bdaf1396af0/details). Note this may not correspond to a release of hyperlane, but was the only image that works easily with our system.
+
+TODO: Find gh commit for this, is it https://github.com/hyperlane-xyz/hyperlane-monorepo/releases/tag/%40hyperlane-xyz%2Fcore%403.1.10?
+
+Hyperlane contracts and CLI are built from custom fork of their monorepo https://github.com/primevprotocol/hyperlane-monorepo.
+
 ## Contract deployer
 
 Address:    `0x82b941824b43F33e417be1E92273A3020a0D760c`
