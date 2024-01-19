@@ -2,9 +2,7 @@
 
 ## Versions
 
-Agents are built from [this image](https://console.cloud.google.com/gcr/images/abacus-labs-dev/global/hyperlane-agent@sha256:854f92966eac6b49e5132e152cc58168ecdddc76c2d390e657b81bdaf1396af0/details). Note this may not correspond to a release of hyperlane, but was the only image that works easily with our system.
-
-TODO: Find gh commit for this, is it https://github.com/hyperlane-xyz/hyperlane-monorepo/releases/tag/%40hyperlane-xyz%2Fcore%403.1.10?
+Agents are built from https://github.com/primevprotocol/hyperlane-monorepo, using the rust/build.sh script from that repo. Docker images for the agents are optimized for amd64 architecture, and may need to be compiled on a powerful machine.
 
 Hyperlane contracts and CLI are built from custom fork of their monorepo https://github.com/primevprotocol/hyperlane-monorepo.
 
