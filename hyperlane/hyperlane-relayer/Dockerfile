@@ -7,6 +7,9 @@ FROM ${AGENT_BASE_IMAGE}
 
 ENV CONFIG_FILES="/deploy-artifacts/agent-config.json"
 
+# ENV HYP_RELAYER_TRACING_FMT="full"
+# ENV HYP_RELAYER_TRACING_LEVEL="trace"
+
 # TODO: enforce minimum gas payment in prod
 
 CMD ./relayer \
@@ -16,4 +19,6 @@ CMD ./relayer \
     --db /relayer-db \
     --defaultSigner.key $RELAYER_PRIVATE_KEY \
     --allowLocalCheckpointSyncers true \
-    --gasPaymentEnforcement '[{"type": "none"}]'
+    --gasPaymentEnforcement '[{"type": "none"}]' \
+    --tracing.fmt "full" \
+    --tracing.level "trace"
