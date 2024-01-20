@@ -1,5 +1,5 @@
 #!/bin/sh
-set -eu
+set -exu
 
 sleep 10
 

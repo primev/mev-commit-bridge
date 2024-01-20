@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -ex
 
 config_file=".bridge_config"
 
