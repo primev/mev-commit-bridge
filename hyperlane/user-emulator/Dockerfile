@@ -5,7 +5,7 @@ RUN apk update && \
 
 RUN pip3 install datadog
 
-COPY cli.sh /usr/local/bin/bridge-cli
+COPY hyperlane/cli.sh /usr/local/bin/bridge-cli
 RUN chmod +x /usr/local/bin/bridge-cli
 
 COPY hyperlane/user-emulator/entrypoint.sh /entrypoint.sh
