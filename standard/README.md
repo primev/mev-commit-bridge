@@ -20,7 +20,7 @@ Note to bridge from the mev-commit chain back to L1, the same protocol is used. 
 
 V2 of the standard bridge should incorporate merkle attestations of cross chain messages, and could possibly focus on a more decentralized bridging architecture. From some initial research, it seems like multiple bridging projects rely on merkle proof data being relayed across chains. The main difference seems to be what validator set is responsible for attesting to or managing the canonical merkle root to verify against.
 
-V2 could also focus on having multiple validators as a part of the bridge multisig.
+V2 could also focus on having multiple validators.
 
 Inspiration:
 
