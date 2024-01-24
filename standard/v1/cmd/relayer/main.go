@@ -166,13 +166,13 @@ func start(c *cli.Context) error {
 
 		err := relayer.TryCloseAll()
 		if err != nil {
-			log.Error().Err(err).Msg("failed to close relayer")
+			log.Error().Err(err).Msg("failed to close all routines and db connection")
 		}
 	}()
 	select {
 	case <-closedAllSuccessfully:
 	case <-time.After(5 * time.Second):
-		log.Error().Msg("failed to close relayer in time")
+		log.Error().Msg("failed to close all in time")
 	}
 
 	return nil
