@@ -103,21 +103,21 @@ func checkConfig(cfg *config) error {
 }
 
 func start(c *cli.Context) error {
-	configFile := c.String(optionConfig.Name)
-	fmt.Fprintf(c.App.Writer, "starting standard bridge relayer with config file: %s\n", configFile)
+	configFilePath := c.String(optionConfig.Name)
+	fmt.Fprintf(c.App.Writer, "starting standard bridge relayer with config file at: %s\n", configFilePath)
 
 	var cfg config
-	buf, err := os.ReadFile(configFile)
+	buf, err := os.ReadFile(configFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to read config file at '%s': %w", configFile, err)
+		return fmt.Errorf("failed to read config file at '%s': %w", configFilePath, err)
 	}
 
 	if err := yaml.Unmarshal(buf, &cfg); err != nil {
-		return fmt.Errorf("failed to unmarshal config file at '%s': %w", configFile, err)
+		return fmt.Errorf("failed to unmarshal config file at '%s': %w", configFilePath, err)
 	}
 
 	if err := checkConfig(&cfg); err != nil {
-		return fmt.Errorf("invalid config file at '%s': %w", configFile, err)
+		return fmt.Errorf("invalid config file at '%s': %w", configFilePath, err)
 	}
 
 	lvl, err := zerolog.ParseLevel(cfg.LogLevel)
@@ -130,6 +130,7 @@ func start(c *cli.Context) error {
 	log.Logger = log.Output(os.Stdout).With().Caller().Logger()
 
 	privKeyFile := cfg.PrivKeyFile
+
 	if strings.HasPrefix(privKeyFile, "~/") {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {

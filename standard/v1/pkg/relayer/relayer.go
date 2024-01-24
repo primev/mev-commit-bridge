@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"standard-bridge/pkg/srclistener"
+	"standard-bridge/pkg/listener"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -51,7 +51,6 @@ func NewRelayer(opts *Options) *Relayer {
 	// 	log.Fatal("failed to init store", err)
 	// }
 
-	// TODO: Can this be improved?
 	pubKey := &opts.PrivateKey.PublicKey
 	pubKeyBytes := crypto.FromECDSAPub(pubKey)
 	hash := sha3.NewLegacyKeccak256()
@@ -59,7 +58,7 @@ func NewRelayer(opts *Options) *Relayer {
 	address := hash.Sum(nil)[12:]
 	valAddr := common.BytesToAddress(address)
 
-	fmt.Println("valAddr", valAddr.Hex())
+	log.Info().Msg("Relayer signing address: " + valAddr.Hex())
 
 	l1Client, err := ethclient.Dial(opts.L1RPCUrl)
 	if err != nil {
@@ -67,7 +66,11 @@ func NewRelayer(opts *Options) *Relayer {
 	}
 
 	l1ChainID, err := l1Client.ChainID(context.Background())
-	fmt.Println("l1ChainID", l1ChainID)
+	if err != nil {
+		// log.Fatal().Err(err).Msg("failed to get l1 chain id")
+		log.Debug().Msg("Skipping l1 chain id")
+	}
+	log.Info().Msg("L1 chain id: " + l1ChainID.String())
 
 	settlementClient, err := ethclient.Dial(opts.SettlementRPCUrl)
 	if err != nil {
@@ -75,14 +78,18 @@ func NewRelayer(opts *Options) *Relayer {
 	}
 
 	settlementChainID, err := settlementClient.ChainID(context.Background())
-	fmt.Println("settlementChainID", settlementChainID)
+	if err != nil {
+		// log.Fatal().Err(err).Msg("failed to dial settlement rpc")
+		log.Debug().Msg("Skipping settlement rpc")
+	}
+	log.Info().Msg("Settlement chain id: " + settlementChainID.String())
 
 	// TODO: read-only contract clients
 
 	// TODO: server
 
-	l1Listener := srclistener.NewSrcListener(l1Client)
-	settlementListener := srclistener.NewSrcListener(settlementClient)
+	l1Listener := listener.NewListener(l1Client)
+	settlementListener := listener.NewListener(settlementClient)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
