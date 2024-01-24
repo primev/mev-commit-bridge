@@ -3,11 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"standard-bridge/pkg/relayer"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -161,14 +159,14 @@ func start(c *cli.Context) error {
 		PgDbname:               cfg.PgDbname,
 	})
 
-	interruptSigChan := make(chan os.Signal, 1)
-	signal.Notify(interruptSigChan, os.Interrupt, syscall.SIGTERM)
+	// interruptSigChan := make(chan os.Signal, 1)
+	// signal.Notify(interruptSigChan, os.Interrupt, syscall.SIGTERM)
 
 	// Block until interrupt signal OR context's Done channel is closed.
-	select {
-	case <-interruptSigChan:
-	case <-c.Done():
-	}
+	// select {
+	// case <-interruptSigChan:
+	<-c.Done()
+	// }
 	fmt.Fprintf(c.App.Writer, "shutting down...\n")
 
 	closedAllSuccessfully := make(chan struct{})
