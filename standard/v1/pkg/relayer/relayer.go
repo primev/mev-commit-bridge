@@ -117,6 +117,9 @@ func NewRelayer(opts *Options) *Relayer {
 func (r *Relayer) TryCloseAll() (err error) {
 	log.Debug().Msg("closing all workers and db connection")
 	defer func() {
+		if r.db == nil {
+			return
+		}
 		if err2 := r.db.Close(); err2 != nil {
 			err = errors.Join(err, err2)
 		}

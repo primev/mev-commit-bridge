@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"standard-bridge/pkg/relayer"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -103,26 +105,27 @@ func checkConfig(cfg *config) error {
 }
 
 func start(c *cli.Context) error {
+
 	configFilePath := c.String(optionConfig.Name)
-	fmt.Fprintf(c.App.Writer, "starting standard bridge relayer with config file at: %s\n", configFilePath)
+	log.Info().Msg("reading config file at: " + configFilePath)
 
 	var cfg config
 	buf, err := os.ReadFile(configFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to read config file at '%s': %w", configFilePath, err)
+		log.Err(err).Msg("failed to read config file at: " + configFilePath)
 	}
 
 	if err := yaml.Unmarshal(buf, &cfg); err != nil {
-		return fmt.Errorf("failed to unmarshal config file at '%s': %w", configFilePath, err)
+		log.Err(err).Msg("failed to unmarshal config file at: " + configFilePath)
 	}
 
 	if err := checkConfig(&cfg); err != nil {
-		return fmt.Errorf("invalid config file at '%s': %w", configFilePath, err)
+		log.Err(err).Msg("invalid config file at: " + configFilePath)
 	}
 
 	lvl, err := zerolog.ParseLevel(cfg.LogLevel)
 	if err != nil {
-		return fmt.Errorf("failed to parse log level '%s': %w", cfg.LogLevel, err)
+		log.Err(err).Msg("failed to parse log level")
 	}
 
 	zerolog.SetGlobalLevel(lvl)
@@ -134,17 +137,17 @@ func start(c *cli.Context) error {
 	if strings.HasPrefix(privKeyFile, "~/") {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return fmt.Errorf("failed to get user home directory: %w", err)
+			log.Err(err).Msg("failed to get user home dir")
 		}
 		privKeyFile = filepath.Join(homeDir, privKeyFile[2:])
 	}
 
 	privKey, err := crypto.LoadECDSA(privKeyFile)
 	if err != nil {
-		return fmt.Errorf("failed to load private key from file '%s': %w", cfg.PrivKeyFile, err)
+		log.Err(err).Msg("failed to load private key")
 	}
 
-	relayer := relayer.NewRelayer(&relayer.Options{
+	r := relayer.NewRelayer(&relayer.Options{
 		PrivateKey:             privKey,
 		HTTPPort:               cfg.HTTPPort,
 		L1RPCUrl:               cfg.L1RPCUrl,
@@ -158,13 +161,21 @@ func start(c *cli.Context) error {
 		PgDbname:               cfg.PgDbname,
 	})
 
-	<-c.Done()
+	interruptSigChan := make(chan os.Signal, 1)
+	signal.Notify(interruptSigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Block until interrupt signal OR context's Done channel is closed.
+	select {
+	case <-interruptSigChan:
+	case <-c.Done():
+	}
 	fmt.Fprintf(c.App.Writer, "shutting down...\n")
+
 	closedAllSuccessfully := make(chan struct{})
 	go func() {
 		defer close(closedAllSuccessfully)
 
-		err := relayer.TryCloseAll()
+		err := r.TryCloseAll()
 		if err != nil {
 			log.Error().Err(err).Msg("failed to close all routines and db connection")
 		}
