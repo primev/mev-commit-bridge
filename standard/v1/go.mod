@@ -4,6 +4,7 @@ go 1.21.4
 
 require (
 	github.com/ethereum/go-ethereum v1.13.5
+	github.com/primevprotocol/contracts-abi v0.0.0-20240131212711-5537161c7b6a
 	github.com/rs/zerolog v1.31.0
 	github.com/urfave/cli/v2 v2.27.1
 	golang.org/x/crypto v0.14.0
@@ -25,9 +26,11 @@ require (
 	github.com/deckarep/golang-set/v2 v2.1.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/ethereum/c-kzg-4844 v0.4.0 // indirect
+	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/getsentry/sentry-go v0.18.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/holiman/uint256 v1.2.3 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect

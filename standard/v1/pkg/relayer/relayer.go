@@ -88,13 +88,11 @@ func NewRelayer(opts *Options) *Relayer {
 
 	// TODO: server
 
-	l1Listener := listener.NewListener(l1Client)
-	settlementListener := listener.NewListener(settlementClient)
-
+	listener := listener.NewListener(
+		settlementClient, opts.SettlementContractAddr,
+		l1Client, opts.L1ContractAddr)
 	ctx, cancel := context.WithCancel(context.Background())
-
-	l1ListenerClosed := l1Listener.Start(ctx)
-	settlementListenerClosed := settlementListener.Start(ctx)
+	listenerClosed := listener.Start(ctx)
 
 	r.waitOnCloseRoutines = func() {
 		// Close ctx's Done channel
@@ -105,8 +103,7 @@ func NewRelayer(opts *Options) *Relayer {
 		allClosed := make(chan struct{})
 		go func() {
 			defer close(allClosed)
-			<-l1ListenerClosed
-			<-settlementListenerClosed
+			<-listenerClosed
 		}()
 		<-allClosed
 	}
