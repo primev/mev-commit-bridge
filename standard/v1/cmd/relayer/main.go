@@ -107,7 +107,6 @@ func checkConfig(cfg *config) error {
 func start(c *cli.Context) error {
 
 	configFilePath := c.String(optionConfig.Name)
-	log.Info().Msg("reading config file at: " + configFilePath)
 
 	var cfg config
 	buf, err := os.ReadFile(configFilePath)
@@ -130,7 +129,7 @@ func start(c *cli.Context) error {
 
 	zerolog.SetGlobalLevel(lvl)
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	log.Logger = log.Output(os.Stdout).With().Caller().Logger()
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
 	privKeyFile := cfg.PrivKeyFile
 

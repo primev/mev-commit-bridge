@@ -12,8 +12,6 @@ import (
 	settlementgateway "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
 )
 
-// See https://goethereumbook.org/event-read/
-
 type Listener struct {
 	settlementClient        *ethclient.Client
 	l1Client                *ethclient.Client
