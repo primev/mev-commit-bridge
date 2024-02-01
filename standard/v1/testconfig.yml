@@ -3,8 +3,8 @@ http_port: 8080
 log_level: "debug"
 l1_rpc_url: "http://localhost:9545"
 settlement_rpc_url: "http://localhost:8545"
-l1_contract_addr: "0xE3e28fFC8A90EE85db78815D22b33CbEe7E64A1d"
-settlement_contract_addr: "0xF457d6dC28418182AFfc4A0790f3A9151Cf0499f"
+l1_contract_addr: "0x765dF3ddf7223DD0F8916B0a60029Fe1E8011Ef9"
+settlement_contract_addr: "0x34991dD05B6dE236006aBf1AeBBc898289C43280"
 pg_host: "localhost"
 pg_port: 5432
 pg_user: "user"
