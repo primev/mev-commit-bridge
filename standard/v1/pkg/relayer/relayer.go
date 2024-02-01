@@ -12,8 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	l1g "github.com/primevprotocol/contracts-abi/clients/L1Gateway"
-	sg "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/sha3"
 )
@@ -69,8 +67,7 @@ func NewRelayer(opts *Options) *Relayer {
 
 	l1ChainID, err := l1Client.ChainID(context.Background())
 	if err != nil {
-		// log.Fatal().Err(err).Msg("failed to get l1 chain id")
-		log.Debug().Msg("Skipping l1 chain id")
+		log.Fatal().Err(err).Msg("failed to get l1 chain id")
 	}
 	log.Info().Msg("L1 chain id: " + l1ChainID.String())
 
@@ -81,31 +78,18 @@ func NewRelayer(opts *Options) *Relayer {
 
 	settlementChainID, err := settlementClient.ChainID(context.Background())
 	if err != nil {
-		// log.Fatal().Err(err).Msg("failed to dial settlement rpc")
-		log.Debug().Msg("Skipping settlement rpc")
+		log.Fatal().Err(err).Msg("failed to dial settlement rpc")
 	}
 	log.Info().Msg("Settlement chain id: " + settlementChainID.String())
 
 	// TODO: server
 
 	// Instantiate listener
-	sGatewayCaller, err := sg.NewSettlementgatewayCaller(opts.SettlementContractAddr, settlementClient)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create settlement gateway caller")
-	}
-	sGatewayFilterer, err := sg.NewSettlementgatewayFilterer(opts.SettlementContractAddr, settlementClient)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create settlement gateway filterer")
-	}
-	l1GatewayCaller, err := l1g.NewL1gatewayCaller(opts.L1ContractAddr, l1Client)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create L1 gateway caller")
-	}
-	l1GatewayFilterer, err := l1g.NewL1gatewayFilterer(opts.L1ContractAddr, l1Client)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create L1 gateway filterer")
-	}
-	listener := listener.NewGatewayListener(sGatewayCaller, sGatewayFilterer, l1GatewayCaller, l1GatewayFilterer)
+	listener := listener.NewGatewayListener(
+		opts.SettlementContractAddr,
+		settlementClient,
+		opts.L1ContractAddr,
+		l1Client)
 	ctx, cancel := context.WithCancel(context.Background())
 	listenerClosed := listener.Start(ctx)
 
