@@ -51,7 +51,7 @@ func (listener *GatewayListener) Start(ctx context.Context) <-chan struct{} {
 			case <-ticker.C:
 				owner, err := listener.sGatewayCaller.Owner(&bind.CallOpts{Context: ctx})
 				if err != nil {
-					log.Error().Err(err).Msg("failed to get l1 owner")
+					log.Fatal().Err(err).Msg("failed to get owner")
 				}
 				log.Info().Str("owner", owner.String()).Msg("l1 owner")
 				opts := &bind.FilterOpts{
@@ -61,7 +61,7 @@ func (listener *GatewayListener) Start(ctx context.Context) <-chan struct{} {
 				}
 				l1Iter, err := listener.l1GatewayFilterer.FilterTransferInitiated(opts, nil, nil)
 				if err != nil {
-					log.Error().Err(err).Msg("failed to filter transfer initiated")
+					log.Fatal().Err(err).Msg("failed to filter transfer initiated")
 				}
 				idx := 0
 				for l1Iter.Next() {
@@ -75,7 +75,7 @@ func (listener *GatewayListener) Start(ctx context.Context) <-chan struct{} {
 
 				sIter, err := listener.sGatewayFilterer.FilterTransferInitiated(opts, nil, nil)
 				if err != nil {
-					log.Error().Err(err).Msg("failed to filter transfer initiated")
+					log.Fatal().Err(err).Msg("failed to filter transfer initiated")
 				}
 				idx = 0
 				for sIter.Next() {
