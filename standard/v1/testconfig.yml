@@ -4,7 +4,7 @@ log_level: "debug"
 l1_rpc_url: "http://localhost:9545"
 settlement_rpc_url: "http://localhost:8545"
 l1_contract_addr: "0xE3e28fFC8A90EE85db78815D22b33CbEe7E64A1d"
-settlement_contract_addr: "0xd7c994692d5ac39F1d3a4E653e576C346820F226"
+settlement_contract_addr: "0xF457d6dC28418182AFfc4A0790f3A9151Cf0499f"
 pg_host: "localhost"
 pg_port: 5432
 pg_user: "user"
