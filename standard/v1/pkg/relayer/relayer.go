@@ -12,6 +12,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	l1g "github.com/primevprotocol/contracts-abi/clients/L1Gateway"
+	sg "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/sha3"
 )
@@ -84,13 +86,26 @@ func NewRelayer(opts *Options) *Relayer {
 	}
 	log.Info().Msg("Settlement chain id: " + settlementChainID.String())
 
-	// TODO: read-only contract clients
-
 	// TODO: server
 
-	listener := listener.NewListener(
-		settlementClient, opts.SettlementContractAddr,
-		l1Client, opts.L1ContractAddr)
+	// Instantiate listener
+	sGatewayCaller, err := sg.NewSettlementgatewayCaller(opts.SettlementContractAddr, settlementClient)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create settlement gateway caller")
+	}
+	sGatewayFilterer, err := sg.NewSettlementgatewayFilterer(opts.SettlementContractAddr, settlementClient)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create settlement gateway filterer")
+	}
+	l1GatewayCaller, err := l1g.NewL1gatewayCaller(opts.L1ContractAddr, l1Client)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create L1 gateway caller")
+	}
+	l1GatewayFilterer, err := l1g.NewL1gatewayFilterer(opts.L1ContractAddr, l1Client)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create L1 gateway filterer")
+	}
+	listener := listener.NewGatewayListener(sGatewayCaller, sGatewayFilterer, l1GatewayCaller, l1GatewayFilterer)
 	ctx, cancel := context.WithCancel(context.Background())
 	listenerClosed := listener.Start(ctx)
 

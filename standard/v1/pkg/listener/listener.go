@@ -4,45 +4,36 @@ import (
 	"context"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	l1g "github.com/primevprotocol/contracts-abi/clients/L1Gateway"
+	sg "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
 	"github.com/rs/zerolog/log"
-
-	l1gateway "github.com/primevprotocol/contracts-abi/clients/L1Gateway"
-	settlementgateway "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
 )
 
-type Listener struct {
-	settlementClient        *ethclient.Client
-	l1Client                *ethclient.Client
-	settlementGatewayCaller *settlementgateway.SettlementgatewayCaller
-	l1GatewayCaller         *l1gateway.L1gatewayCaller
+type GatewayListener struct {
+	sGatewayCaller    *sg.SettlementgatewayCaller
+	sGatewayFilterer  *sg.SettlementgatewayFilterer
+	l1GatewayCaller   *l1g.L1gatewayCaller
+	l1GatewayFilterer *l1g.L1gatewayFilterer
 }
 
-func NewListener(settlementClient *ethclient.Client,
-	settlementGatewayAddr common.Address,
-	l1Client *ethclient.Client,
-	l1GatewayAddr common.Address,
-) *Listener {
-	sGatewayCaller, err := settlementgateway.NewSettlementgatewayCaller(
-		settlementGatewayAddr, settlementClient)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create settlement gateway caller")
+func NewGatewayListener(
+	sGatewayCaller *sg.SettlementgatewayCaller,
+	sGatewayFilterer *sg.SettlementgatewayFilterer,
+	l1GatewayCaller *l1g.L1gatewayCaller,
+	l1GatewayFilterer *l1g.L1gatewayFilterer,
+) *GatewayListener {
+	return &GatewayListener{
+		sGatewayCaller:    sGatewayCaller,
+		sGatewayFilterer:  sGatewayFilterer,
+		l1GatewayCaller:   l1GatewayCaller,
+		l1GatewayFilterer: l1GatewayFilterer,
 	}
-	l1GatewayCaller, err := l1gateway.NewL1gatewayCaller(
-		l1GatewayAddr, l1Client)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create L1 gateway caller")
-	}
-	return &Listener{
-		settlementClient:        settlementClient,
-		l1Client:                l1Client,
-		settlementGatewayCaller: sGatewayCaller,
-		l1GatewayCaller:         l1GatewayCaller,
-	}
+
 }
 
-func (s *Listener) Start(ctx context.Context) <-chan struct{} {
+// method for start
+func (listener *GatewayListener) Start(ctx context.Context) <-chan struct{} {
 
 	doneChan := make(chan struct{})
 
@@ -58,17 +49,43 @@ func (s *Listener) Start(ctx context.Context) <-chan struct{} {
 				log.Debug().Msg("stopping listener")
 				return
 			case <-ticker.C:
-				log.Info().Msg("ticking listener")
-				owner, err := s.settlementGatewayCaller.Owner(nil)
+				owner, err := listener.sGatewayCaller.Owner(&bind.CallOpts{Context: ctx})
 				if err != nil {
-					log.Error().Err(err).Msg("failed to get owner")
+					log.Error().Err(err).Msg("failed to get l1 owner")
 				}
-				log.Info().Str("owner", owner.String()).Msg("owner")
-				owner, err = s.l1GatewayCaller.Owner(nil)
+				log.Info().Str("owner", owner.String()).Msg("l1 owner")
+				opts := &bind.FilterOpts{
+					Start:   0,
+					End:     nil,
+					Context: ctx,
+				}
+				l1Iter, err := listener.l1GatewayFilterer.FilterTransferInitiated(opts, nil, nil)
 				if err != nil {
-					log.Error().Err(err).Msg("failed to get owner")
+					log.Error().Err(err).Msg("failed to filter transfer initiated")
 				}
-				log.Info().Str("owner", owner.String()).Msg("owner")
+				idx := 0
+				for l1Iter.Next() {
+					log.Info().Str("sender", l1Iter.Event.Sender.String()).
+						Str("recipient", l1Iter.Event.Recipient.String()).
+						Str("amount", l1Iter.Event.Amount.String()).
+						Msg("transfer initiated on l1")
+					idx++
+				}
+				log.Debug().Int("count", idx).Msg("transfer initiated l1 count")
+
+				sIter, err := listener.sGatewayFilterer.FilterTransferInitiated(opts, nil, nil)
+				if err != nil {
+					log.Error().Err(err).Msg("failed to filter transfer initiated")
+				}
+				idx = 0
+				for sIter.Next() {
+					log.Info().Str("sender", sIter.Event.Sender.String()).
+						Str("recipient", sIter.Event.Recipient.String()).
+						Str("amount", sIter.Event.Amount.String()).
+						Msg("transfer initiated on settlement")
+					idx++
+				}
+				log.Debug().Int("count", idx).Msg("transfer initiated settlement count")
 			}
 		}
 	}()
