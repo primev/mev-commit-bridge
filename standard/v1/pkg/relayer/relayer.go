@@ -95,7 +95,7 @@ func NewRelayer(opts *Options) *Relayer {
 
 	sFilterer := listener.NewSettlementFilterer(opts.SettlementContractAddr, settlementClient)
 	sListener := listener.NewListener(settlementClient, sFilterer, false)
-	sListenerClosed, sEventChan := sListener.Start(ctx)
+	sListenerClosed, settlementEventChan := sListener.Start(ctx)
 
 	l1Filterer := listener.NewL1Filterer(opts.L1ContractAddr, l1Client)
 	l1Listener := listener.NewListener(l1Client, l1Filterer, true)
@@ -110,7 +110,7 @@ func NewRelayer(opts *Options) *Relayer {
 		opts.SettlementContractAddr,
 		settlementClient,
 		st,
-		sEventChan,
+		l1EventChan, // L1 transfer initiations result in settlement finalizations
 	)
 	stClosed := settlementTransactor.Start(ctx)
 
@@ -123,7 +123,7 @@ func NewRelayer(opts *Options) *Relayer {
 		opts.L1ContractAddr,
 		l1Client,
 		l1t,
-		l1EventChan,
+		settlementEventChan, // Settlement transfer initiations result in L1 finalizations
 	)
 	l1tClosed := l1Transactor.Start(ctx)
 

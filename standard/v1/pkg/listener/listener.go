@@ -24,10 +24,7 @@ func NewListener(
 	gatewayFilterer GatewayFilterer,
 	sync bool,
 ) *Listener {
-	// sGatewayFilterer, err := sg.NewSettlementgatewayFilterer(settlementAddr, settlementClient)
-	// if err != nil {
-	// 	log.Fatal().Err(err).Msg("failed to create settlement gateway filterer")
-	// }
+
 	return &Listener{
 		rawClient:       client,
 		gatewayFilterer: gatewayFilterer,
