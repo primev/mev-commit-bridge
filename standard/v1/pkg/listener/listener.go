@@ -19,37 +19,21 @@ type Listener struct {
 	EventChan       chan TransferInitiatedEvent
 }
 
+type GatewayFilterer interface {
+	ObtainTransferInitiatedEvents(opts *bind.FilterOpts) []TransferInitiatedEvent
+}
+
 func NewListener(
 	client *ethclient.Client,
 	gatewayFilterer GatewayFilterer,
 	sync bool,
 ) *Listener {
-
 	return &Listener{
 		rawClient:       client,
 		gatewayFilterer: gatewayFilterer,
 		sync:            true,
 	}
 }
-
-type GatewayFilterer interface {
-	ObtainTransferInitiatedEvents(opts *bind.FilterOpts) []TransferInitiatedEvent
-}
-
-type TransferInitiatedEvent struct {
-	Sender      string
-	Recipient   string
-	Amount      uint64
-	TransferIdx uint64
-	srcChain    srcChain
-}
-
-type srcChain int
-
-const (
-	settlement srcChain = iota
-	l1
-)
 
 func (listener *Listener) Start(ctx context.Context) (
 	<-chan struct{}, <-chan TransferInitiatedEvent,

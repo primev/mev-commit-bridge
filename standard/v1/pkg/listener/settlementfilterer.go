@@ -35,8 +35,31 @@ func (f *SettlementFilterer) ObtainTransferInitiatedEvents(opts *bind.FilterOpts
 			Recipient:   iter.Event.Recipient.String(),
 			Amount:      iter.Event.Amount.Uint64(),
 			TransferIdx: iter.Event.TransferIdx.Uint64(),
-			srcChain:    l1,
+			Chain:       settlement,
 		})
 	}
 	return toReturn
+}
+
+func (f *SettlementFilterer) ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx uint64) (TransferFinalizedEvent, bool) {
+	// TODO: make counterpartyIdx indexed in the contract, for now we use naive filter
+	iter, err := f.FilterTransferFinalized(opts, nil)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to filter transfer finalized")
+	}
+	events := make([]TransferFinalizedEvent, 0)
+	for iter.Next() {
+		events = append(events, TransferFinalizedEvent{
+			Recipient:       iter.Event.Recipient.String(),
+			Amount:          iter.Event.Amount.Uint64(),
+			CounterpartyIdx: iter.Event.CounterpartyIdx.Uint64(),
+			Chain:           settlement,
+		})
+	}
+	for _, e := range events {
+		if e.CounterpartyIdx == counterpartyIdx {
+			return e, true
+		}
+	}
+	return TransferFinalizedEvent{}, false
 }

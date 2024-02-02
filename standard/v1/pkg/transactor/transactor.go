@@ -16,15 +16,13 @@ import (
 
 // TODO: unit tests
 
-// TODO: Have listener as a part of tx process that monitors for finalized transfers
-// and doesn't double-count. Could also use single filtered event query
-
 // TODO: Improve impl to wait on txes async and send in succession
 
 type Transactor struct {
 	privateKey        *ecdsa.PrivateKey
 	rawClient         *ethclient.Client
 	gatewayTransactor gatewayTransactor
+	gatewayFilterer   gatewayFilterer
 	chainID           *big.Int
 	eventChan         <-chan listener.TransferInitiatedEvent
 }
@@ -34,17 +32,24 @@ type gatewayTransactor interface {
 		_amount *big.Int, _counterpartyIdx *big.Int) (*types.Transaction, error)
 }
 
+type gatewayFilterer interface {
+	ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx uint64) (
+		listener.TransferFinalizedEvent, bool)
+}
+
 func NewTransactor(
 	pk *ecdsa.PrivateKey,
 	gatewayAddr common.Address,
 	ethClient *ethclient.Client,
 	gatewayTransactor gatewayTransactor,
+	gatewayFilterer gatewayFilterer,
 	eventChan <-chan listener.TransferInitiatedEvent,
 ) *Transactor {
 	return &Transactor{
 		privateKey:        pk,
 		rawClient:         ethClient,
 		gatewayTransactor: gatewayTransactor,
+		gatewayFilterer:   gatewayFilterer,
 		eventChan:         eventChan,
 	}
 }
@@ -67,6 +72,9 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to get transact opts")
 			}
+			if t.transferAlreadyFinalized(ctx, event.TransferIdx) {
+				continue
+			}
 			err = t.sendFinalizeTransfer(ctx, opts, event)
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to send finalize transfer")
@@ -74,32 +82,6 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 		}
 	}()
 	return doneChan
-}
-
-func (t *Transactor) sendFinalizeTransfer(ctx context.Context, opts *bind.TransactOpts, event listener.TransferInitiatedEvent) error {
-	tx, err := t.gatewayTransactor.FinalizeTransfer(opts,
-		common.HexToAddress(event.Recipient),
-		big.NewInt(int64(event.Amount)),
-		big.NewInt(int64(event.TransferIdx)),
-	)
-	if err != nil {
-		return err
-	}
-	log.Info().Msgf("Transaction sent, hash: %s", tx.Hash().Hex())
-
-	// Wait for the transaction to be included in a block
-	for {
-		receipt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
-		if receipt != nil {
-			log.Info().Msgf("Transaction included in block %s, hash: %s", receipt.BlockNumber, receipt.TxHash.Hex())
-			break
-		}
-		if err != nil && err.Error() != "not found" {
-			log.Fatal().Err(err).Msg("failed to get transaction receipt")
-		}
-		time.Sleep(5 * time.Second) // Polling interval
-	}
-	return nil
 }
 
 // Adaptation of func from oracle repo
@@ -130,4 +112,44 @@ func (s *Transactor) getTransactOpts(ctx context.Context, chainID *big.Int) (*bi
 	auth.GasLimit = uint64(3000000)
 
 	return auth, nil
+}
+
+func (t *Transactor) transferAlreadyFinalized(ctx context.Context, transferIdx uint64) bool {
+	// TODO: improve upon this
+	opts := &bind.FilterOpts{
+		Start: 0,
+		End:   nil,
+	}
+	event, found := t.gatewayFilterer.ObtainTransferFinalizedEvent(opts, transferIdx)
+	if found {
+		log.Info().Msgf("Transfer already finalized %+v", event)
+		return true
+	}
+	return false
+}
+
+func (t *Transactor) sendFinalizeTransfer(ctx context.Context, opts *bind.TransactOpts, event listener.TransferInitiatedEvent) error {
+	tx, err := t.gatewayTransactor.FinalizeTransfer(opts,
+		common.HexToAddress(event.Recipient),
+		big.NewInt(int64(event.Amount)),
+		big.NewInt(int64(event.TransferIdx)),
+	)
+	if err != nil {
+		return err
+	}
+	log.Info().Msgf("Transaction sent, hash: %s", tx.Hash().Hex())
+
+	// Wait for the transaction to be included in a block
+	for {
+		receipt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
+		if receipt != nil {
+			log.Info().Msgf("Transaction included in block %s, hash: %s", receipt.BlockNumber, receipt.TxHash.Hex())
+			break
+		}
+		if err != nil && err.Error() != "not found" {
+			log.Fatal().Err(err).Msg("failed to get transaction receipt")
+		}
+		time.Sleep(5 * time.Second) // Polling interval
+	}
+	return nil
 }
