@@ -9,59 +9,50 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	l1g "github.com/primevprotocol/contracts-abi/clients/L1Gateway"
-	sg "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
 	"github.com/rs/zerolog/log"
 )
 
+// TODO: unit tests
+
+// TODO: Have listener as a part of tx process that monitors for finalized transfers
+// and doesn't double-count.
+
 type Transactor struct {
-	privateKey           *ecdsa.PrivateKey
-	settlementRawClient  *ethclient.Client
-	settlementTransactor *sg.SettlementgatewayTransactor
-	settlementChainID    *big.Int
-	l1RawClient          *ethclient.Client
-	l1Transactor         *l1g.L1gatewayTransactor
-	l1ChainID            *big.Int
-	eventChan            <-chan listener.TransferInitiatedEvent
+	privateKey        *ecdsa.PrivateKey
+	rawClient         *ethclient.Client
+	gatewayTransactor gatewayTransactor
+	chainID           *big.Int
+	eventChan         <-chan listener.TransferInitiatedEvent
+}
+
+type gatewayTransactor interface {
+	FinalizeTransfer(opts *bind.TransactOpts, _recipient common.Address,
+		_amount *big.Int, _counterpartyIdx *big.Int) (*types.Transaction, error)
 }
 
 func NewTransactor(
 	pk *ecdsa.PrivateKey,
-	settlementAddr common.Address,
-	settlementClient *ethclient.Client,
-	l1Addr common.Address,
-	l1Client *ethclient.Client,
+	gatewayAddr common.Address,
+	ethClient *ethclient.Client,
+	gatewayTransactor gatewayTransactor,
 	eventChan <-chan listener.TransferInitiatedEvent,
 ) *Transactor {
-	st, err := sg.NewSettlementgatewayTransactor(settlementAddr, settlementClient)
-	if err != nil {
-		log.Fatal().Msg("failed to create settlement gateway transactor")
-	}
-	l1t, err := l1g.NewL1gatewayTransactor(l1Addr, l1Client)
-	if err != nil {
-		log.Fatal().Msg("failed to create L1 gateway transactor")
-	}
 	return &Transactor{
-		privateKey:           pk,
-		settlementRawClient:  settlementClient,
-		settlementTransactor: st,
-		l1RawClient:          l1Client,
-		l1Transactor:         l1t,
-		eventChan:            eventChan,
+		privateKey:        pk,
+		rawClient:         ethClient,
+		gatewayTransactor: gatewayTransactor,
+		eventChan:         eventChan,
 	}
 }
 
 func (t *Transactor) Start(ctx context.Context) {
 
 	var err error
-	t.settlementChainID, err = t.settlementRawClient.ChainID(ctx)
+	t.chainID, err = t.rawClient.ChainID(ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get settlement chain id")
-	}
-	t.l1ChainID, err = t.l1RawClient.ChainID(ctx)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get l1 chain id")
+		log.Fatal().Err(err).Msg("failed to get chain id")
 	}
 
 	go func() {
@@ -69,12 +60,12 @@ func (t *Transactor) Start(ctx context.Context) {
 
 			log.Info().Msgf("Received event at Transactor!%+v", event)
 
-			opts, err := t.getTransactOpts(ctx, t.settlementChainID)
+			opts, err := t.getTransactOpts(ctx, t.chainID)
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to get transact opts")
 			}
 			log.Info().Msgf("opts: %+v", opts)
-			tx, err := t.settlementTransactor.FinalizeTransfer(opts,
+			tx, err := t.gatewayTransactor.FinalizeTransfer(opts,
 				common.HexToAddress(event.Recipient),
 				big.NewInt(int64(event.Amount)),
 				big.NewInt(int64(event.TransferIdx)),
@@ -83,12 +74,11 @@ func (t *Transactor) Start(ctx context.Context) {
 				log.Fatal().Err(err).Msg("failed to finalize transfer")
 			}
 			log.Info().Msgf("tx: %+v", tx)
-			// hash
 			log.Info().Msgf("tx hash: %+v", tx.Hash().Hex())
 
 			// for 10 iterations
 			for i := 0; i < 10; i++ {
-				recpt, err := t.settlementRawClient.TransactionReceipt(ctx, tx.Hash())
+				recpt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
 				if err != nil {
 					log.Error().Err(err).Msg("failed to get transaction receipt")
 				}
@@ -106,18 +96,18 @@ func (s *Transactor) getTransactOpts(ctx context.Context, chainID *big.Int) (*bi
 	if err != nil {
 		return nil, err
 	}
-	nonce, err := s.settlementRawClient.PendingNonceAt(ctx, auth.From)
+	nonce, err := s.rawClient.PendingNonceAt(ctx, auth.From)
 	if err != nil {
 		return nil, err
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 
-	gasTip, err := s.settlementRawClient.SuggestGasTipCap(ctx)
+	gasTip, err := s.rawClient.SuggestGasTipCap(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	gasPrice, err := s.settlementRawClient.SuggestGasPrice(ctx)
+	gasPrice, err := s.rawClient.SuggestGasPrice(ctx)
 	if err != nil {
 		return nil, err
 	}

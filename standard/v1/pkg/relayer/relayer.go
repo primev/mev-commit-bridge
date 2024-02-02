@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	sg "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/sha3"
 )
@@ -97,17 +98,20 @@ func NewRelayer(opts *Options) *Relayer {
 	ctx, cancel := context.WithCancel(context.Background())
 	listenerClosed, eventChan := listener.Start(ctx)
 
-	transactor := transactor.NewTransactor(
+	st, err := sg.NewSettlementgatewayTransactor(opts.SettlementContractAddr, settlementClient)
+	if err != nil {
+		log.Fatal().Msg("failed to create settlement gateway transactor")
+	}
+	settlementTransactor := transactor.NewTransactor(
 		opts.PrivateKey,
 		opts.SettlementContractAddr,
 		settlementClient,
-		opts.L1ContractAddr,
-		l1Client,
+		st,
 		eventChan,
 	)
-	transactor.Start(ctx)
+	settlementTransactor.Start(ctx)
 
-	// Send test tx to get transactor up and running
+	// TODO: l1 transactor
 
 	r.waitOnCloseRoutines = func() {
 		// Close ctx's Done channel

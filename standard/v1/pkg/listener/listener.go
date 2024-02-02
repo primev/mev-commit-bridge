@@ -14,6 +14,8 @@ import (
 
 // TODO: unit tests
 
+// TODO: refactor similar to transactor, where we instantiate two generalized listeners
+
 type Listener struct {
 	sRawClient        *ethclient.Client
 	sGatewayCaller    *sg.SettlementgatewayCaller
