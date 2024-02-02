@@ -67,8 +67,6 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to get transact opts")
 			}
-			log.Info().Msgf("opts: %+v", opts)
-
 			err = t.sendFinalizeTransfer(ctx, opts, event)
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to send finalize transfer")
@@ -93,7 +91,7 @@ func (t *Transactor) sendFinalizeTransfer(ctx context.Context, opts *bind.Transa
 	for {
 		receipt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
 		if receipt != nil {
-			log.Info().Msgf("Transaction included in block %s, hash: %s", receipt.BlockNumber, receipt.BlockHash.Hex())
+			log.Info().Msgf("Transaction included in block %s, hash: %s", receipt.BlockNumber, receipt.TxHash.Hex())
 			break
 		}
 		if err != nil && err.Error() != "not found" {

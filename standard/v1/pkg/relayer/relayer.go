@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	l1g "github.com/primevprotocol/contracts-abi/clients/L1Gateway"
 	sg "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/sha3"
@@ -43,6 +44,8 @@ type Relayer struct {
 func NewRelayer(opts *Options) *Relayer {
 
 	r := &Relayer{}
+
+	// TODO: db
 
 	// db, err := initDB(opts)
 	// if err != nil {
@@ -88,8 +91,6 @@ func NewRelayer(opts *Options) *Relayer {
 
 	// TODO: server
 
-	// TODO: shared config type with eth clients, chainIds, contract addrs,
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sFilterer := listener.NewSettlementFilterer(opts.SettlementContractAddr, settlementClient)
@@ -98,8 +99,7 @@ func NewRelayer(opts *Options) *Relayer {
 
 	l1Filterer := listener.NewL1Filterer(opts.L1ContractAddr, l1Client)
 	l1Listener := listener.NewListener(l1Client, l1Filterer, true)
-	// TODO: listen to both events
-	l1ListenerClosed, _ := l1Listener.Start(ctx)
+	l1ListenerClosed, l1EventChan := l1Listener.Start(ctx)
 
 	st, err := sg.NewSettlementgatewayTransactor(opts.SettlementContractAddr, settlementClient)
 	if err != nil {
@@ -114,7 +114,18 @@ func NewRelayer(opts *Options) *Relayer {
 	)
 	stClosed := settlementTransactor.Start(ctx)
 
-	// TODO: l1 transactor
+	l1t, err := l1g.NewL1gatewayTransactor(opts.L1ContractAddr, l1Client)
+	if err != nil {
+		log.Fatal().Msg("failed to create l1 gateway transactor")
+	}
+	l1Transactor := transactor.NewTransactor(
+		opts.PrivateKey,
+		opts.L1ContractAddr,
+		l1Client,
+		l1t,
+		l1EventChan,
+	)
+	l1tClosed := l1Transactor.Start(ctx)
 
 	r.waitOnCloseRoutines = func() {
 		// Close ctx's Done channel
@@ -128,6 +139,7 @@ func NewRelayer(opts *Options) *Relayer {
 			<-sListenerClosed
 			<-l1ListenerClosed
 			<-stClosed
+			<-l1tClosed
 		}()
 		<-allClosed
 	}
