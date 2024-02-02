@@ -6,7 +6,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"standard-bridge/pkg/listener"
+	listener "standard-bridge/pkg/listener"
+	"standard-bridge/pkg/transactor"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -84,14 +85,22 @@ func NewRelayer(opts *Options) *Relayer {
 
 	// TODO: server
 
-	// Instantiate listener
-	listener := listener.NewGatewayListener(
+	listener := listener.NewListener(
 		opts.SettlementContractAddr,
 		settlementClient,
 		opts.L1ContractAddr,
 		l1Client)
 	ctx, cancel := context.WithCancel(context.Background())
-	listenerClosed := listener.Start(ctx)
+	listenerClosed, eventChan := listener.Start(ctx)
+
+	transactor := transactor.NewTransactor(
+		opts.SettlementContractAddr,
+		settlementClient,
+		opts.L1ContractAddr,
+		l1Client,
+		eventChan,
+	)
+	transactor.Start()
 
 	r.waitOnCloseRoutines = func() {
 		// Close ctx's Done channel

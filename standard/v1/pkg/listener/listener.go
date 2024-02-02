@@ -12,7 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type GatewayListener struct {
+type Listener struct {
 	sRawClient        *ethclient.Client
 	sGatewayCaller    *sg.SettlementgatewayCaller
 	sGatewayFilterer  *sg.SettlementgatewayFilterer
@@ -20,14 +20,16 @@ type GatewayListener struct {
 	l1GatewayCaller   *l1g.L1gatewayCaller
 	l1GatewayFilterer *l1g.L1gatewayFilterer
 	sync              bool
+	DoneChan          chan struct{}
+	EventChan         chan TransferInitiatedEvent
 }
 
-func NewGatewayListener(
+func NewListener(
 	settlementAddr common.Address,
 	settlementClient *ethclient.Client,
 	l1Addr common.Address,
 	l1Client *ethclient.Client,
-) *GatewayListener {
+) *Listener {
 	sGatewayCaller, err := sg.NewSettlementgatewayCaller(settlementAddr, settlementClient)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create settlement gateway caller")
@@ -44,7 +46,7 @@ func NewGatewayListener(
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create L1 gateway filterer")
 	}
-	return &GatewayListener{
+	return &Listener{
 		sRawClient:        settlementClient,
 		sGatewayCaller:    sGatewayCaller,
 		sGatewayFilterer:  sGatewayFilterer,
@@ -55,19 +57,30 @@ func NewGatewayListener(
 	}
 }
 
-func (listener *GatewayListener) Start(ctx context.Context) <-chan struct{} {
+type TransferInitiatedEvent struct {
+	Sender    string
+	Recipient string
+	Amount    uint64
+}
 
-	doneChan := make(chan struct{})
-
+func (listener *Listener) Start(ctx context.Context) (
+	<-chan struct{}, <-chan TransferInitiatedEvent,
+) {
+	listener.DoneChan = make(chan struct{})
+	// Buffer up to 10 events
+	listener.EventChan = make(chan TransferInitiatedEvent, 10)
 	go func() {
-		defer close(doneChan)
+		defer close(listener.DoneChan)
+		defer close(listener.EventChan)
+
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
+
 		log.Debug().Msg("starting listener")
 
 		// Blocks up to this value have been handled
-		var settlementBlockNum uint64
-		var l1BlockNum uint64
+		settlementBlockNum := uint64(0)
+		l1BlockNum := uint64(0)
 
 		if listener.sync {
 			settlementBlockNum = listener.GetSettlementBlockNum(ctx)
@@ -101,10 +114,10 @@ func (listener *GatewayListener) Start(ctx context.Context) <-chan struct{} {
 			l1BlockNum = newNum
 		}
 	}()
-	return doneChan
+	return listener.DoneChan, listener.EventChan
 }
 
-func (listener *GatewayListener) GetSettlementBlockNum(ctx context.Context) uint64 {
+func (listener *Listener) GetSettlementBlockNum(ctx context.Context) uint64 {
 	settlementBlockNum, err := listener.sRawClient.BlockNumber(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get settlement block number")
@@ -112,7 +125,7 @@ func (listener *GatewayListener) GetSettlementBlockNum(ctx context.Context) uint
 	return settlementBlockNum
 }
 
-func (listener *GatewayListener) GetL1BlockNum(ctx context.Context) uint64 {
+func (listener *Listener) GetL1BlockNum(ctx context.Context) uint64 {
 	l1BlockNum, err := listener.l1RawClient.BlockNumber(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get l1 block number")
@@ -120,7 +133,7 @@ func (listener *GatewayListener) GetL1BlockNum(ctx context.Context) uint64 {
 	return l1BlockNum
 }
 
-func (listener *GatewayListener) GetFilterOpts(ctx context.Context, start uint64, end uint64) *bind.FilterOpts {
+func (listener *Listener) GetFilterOpts(ctx context.Context, start uint64, end uint64) *bind.FilterOpts {
 	return &bind.FilterOpts{
 		Start:   start, // TODO: Confirm no off-by-one error
 		End:     nil,
@@ -128,36 +141,40 @@ func (listener *GatewayListener) GetFilterOpts(ctx context.Context, start uint64
 	}
 }
 
-func (listener *GatewayListener) HandleSettlementEvents(ctx context.Context, start uint64, end uint64) {
+func (listener *Listener) HandleSettlementEvents(ctx context.Context, start uint64, end uint64) {
 	opts := listener.GetFilterOpts(ctx, start, end)
 	sIter, err := listener.sGatewayFilterer.FilterTransferInitiated(opts, nil, nil)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to filter transfer initiated")
 	}
-	idx := 0
 	for sIter.Next() {
 		log.Info().Str("sender", sIter.Event.Sender.String()).
 			Str("recipient", sIter.Event.Recipient.String()).
 			Str("amount", sIter.Event.Amount.String()).
 			Msg("transfer initiated on settlement")
-		idx++
+		listener.EventChan <- TransferInitiatedEvent{
+			Sender:    sIter.Event.Sender.String(),
+			Recipient: sIter.Event.Recipient.String(),
+			Amount:    sIter.Event.Amount.Uint64(),
+		}
 	}
-	log.Debug().Int("count", idx).Msg("count of transfers initiated on settlement this cycle")
 }
 
-func (listener *GatewayListener) HandleL1Events(ctx context.Context, start uint64, end uint64) {
+func (listener *Listener) HandleL1Events(ctx context.Context, start uint64, end uint64) {
 	opts := listener.GetFilterOpts(ctx, start, end)
 	l1Iter, err := listener.l1GatewayFilterer.FilterTransferInitiated(opts, nil, nil)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to filter transfer initiated")
 	}
-	idx := 0
 	for l1Iter.Next() {
 		log.Info().Str("sender", l1Iter.Event.Sender.String()).
 			Str("recipient", l1Iter.Event.Recipient.String()).
 			Str("amount", l1Iter.Event.Amount.String()).
 			Msg("transfer initiated on L1")
-		idx++
+		listener.EventChan <- TransferInitiatedEvent{
+			Sender:    l1Iter.Event.Sender.String(),
+			Recipient: l1Iter.Event.Recipient.String(),
+			Amount:    l1Iter.Event.Amount.Uint64(),
+		}
 	}
-	log.Debug().Int("count", idx).Msg("count of transfers initiated on L1 this cycle")
 }
