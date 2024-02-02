@@ -19,6 +19,8 @@ import (
 // TODO: Have listener as a part of tx process that monitors for finalized transfers
 // and doesn't double-count. Could also use single filtered event query
 
+// TODO: Improve impl to wait on txes async and send in succession
+
 type Transactor struct {
 	privateKey        *ecdsa.PrivateKey
 	rawClient         *ethclient.Client
@@ -48,7 +50,6 @@ func NewTransactor(
 }
 
 func (t *Transactor) Start(ctx context.Context) {
-
 	var err error
 	t.chainID, err = t.rawClient.ChainID(ctx)
 	if err != nil {
@@ -57,37 +58,45 @@ func (t *Transactor) Start(ctx context.Context) {
 
 	go func() {
 		for event := range t.eventChan {
-
 			log.Info().Msgf("Received event at Transactor!%+v", event)
-
 			opts, err := t.getTransactOpts(ctx, t.chainID)
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to get transact opts")
 			}
 			log.Info().Msgf("opts: %+v", opts)
-			tx, err := t.gatewayTransactor.FinalizeTransfer(opts,
-				common.HexToAddress(event.Recipient),
-				big.NewInt(int64(event.Amount)),
-				big.NewInt(int64(event.TransferIdx)),
-			)
-			if err != nil {
-				log.Fatal().Err(err).Msg("failed to finalize transfer")
-			}
-			log.Info().Msgf("tx: %+v", tx)
-			log.Info().Msgf("tx hash: %+v", tx.Hash().Hex())
 
-			// for 10 iterations
-			for i := 0; i < 10; i++ {
-				recpt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
-				if err != nil {
-					log.Error().Err(err).Msg("failed to get transaction receipt")
-				}
-				log.Info().Msgf("recpt: %+v", recpt)
-				// sleep 5
-				time.Sleep(5 * time.Second)
+			err = t.sendFinalizeTransfer(ctx, opts, event)
+			if err != nil {
+				log.Fatal().Err(err).Msg("failed to send finalize transfer")
 			}
 		}
 	}()
+}
+
+func (t *Transactor) sendFinalizeTransfer(ctx context.Context, opts *bind.TransactOpts, event listener.TransferInitiatedEvent) error {
+	tx, err := t.gatewayTransactor.FinalizeTransfer(opts,
+		common.HexToAddress(event.Recipient),
+		big.NewInt(int64(event.Amount)),
+		big.NewInt(int64(event.TransferIdx)),
+	)
+	if err != nil {
+		return err
+	}
+	log.Info().Msgf("Transaction sent, hash: %s", tx.Hash().Hex())
+
+	// Wait for the transaction to be included in a block
+	for {
+		receipt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
+		if receipt != nil {
+			log.Info().Msgf("Transaction included in block %s, hash: %s", receipt.BlockNumber, receipt.BlockHash.Hex())
+			break
+		}
+		if err != nil && err.Error() != "not found" {
+			log.Fatal().Err(err).Msg("failed to get transaction receipt")
+		}
+		time.Sleep(5 * time.Second) // Polling interval
+	}
+	return nil
 }
 
 // Adaptation of func from oracle repo
