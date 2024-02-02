@@ -17,7 +17,7 @@ import (
 // TODO: unit tests
 
 // TODO: Have listener as a part of tx process that monitors for finalized transfers
-// and doesn't double-count.
+// and doesn't double-count. Could also use single filtered event query
 
 type Transactor struct {
 	privateKey        *ecdsa.PrivateKey
