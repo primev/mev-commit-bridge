@@ -58,10 +58,19 @@ func NewListener(
 }
 
 type TransferInitiatedEvent struct {
-	Sender    string
-	Recipient string
-	Amount    uint64
+	Sender      string
+	Recipient   string
+	Amount      uint64
+	TransferIdx uint64
+	srcChain    srcChain
 }
+
+type srcChain int
+
+const (
+	settlement srcChain = iota
+	l1
+)
 
 func (listener *Listener) Start(ctx context.Context) (
 	<-chan struct{}, <-chan TransferInitiatedEvent,
@@ -153,9 +162,11 @@ func (listener *Listener) HandleSettlementEvents(ctx context.Context, start uint
 			Str("amount", sIter.Event.Amount.String()).
 			Msg("transfer initiated on settlement")
 		listener.EventChan <- TransferInitiatedEvent{
-			Sender:    sIter.Event.Sender.String(),
-			Recipient: sIter.Event.Recipient.String(),
-			Amount:    sIter.Event.Amount.Uint64(),
+			Sender:      sIter.Event.Sender.String(),
+			Recipient:   sIter.Event.Recipient.String(),
+			Amount:      sIter.Event.Amount.Uint64(),
+			TransferIdx: sIter.Event.TransferIdx.Uint64(),
+			srcChain:    settlement,
 		}
 	}
 }
@@ -172,9 +183,11 @@ func (listener *Listener) HandleL1Events(ctx context.Context, start uint64, end 
 			Str("amount", l1Iter.Event.Amount.String()).
 			Msg("transfer initiated on L1")
 		listener.EventChan <- TransferInitiatedEvent{
-			Sender:    l1Iter.Event.Sender.String(),
-			Recipient: l1Iter.Event.Recipient.String(),
-			Amount:    l1Iter.Event.Amount.Uint64(),
+			Sender:      l1Iter.Event.Sender.String(),
+			Recipient:   l1Iter.Event.Recipient.String(),
+			Amount:      l1Iter.Event.Amount.Uint64(),
+			TransferIdx: l1Iter.Event.TransferIdx.Uint64(),
+			srcChain:    l1,
 		}
 	}
 }

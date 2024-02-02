@@ -85,6 +85,8 @@ func NewRelayer(opts *Options) *Relayer {
 
 	// TODO: server
 
+	// TODO: shared config type with eth clients, chainIds, contract addrs,
+
 	listener := listener.NewListener(
 		opts.SettlementContractAddr,
 		settlementClient,
@@ -94,13 +96,16 @@ func NewRelayer(opts *Options) *Relayer {
 	listenerClosed, eventChan := listener.Start(ctx)
 
 	transactor := transactor.NewTransactor(
+		opts.PrivateKey,
 		opts.SettlementContractAddr,
 		settlementClient,
 		opts.L1ContractAddr,
 		l1Client,
 		eventChan,
 	)
-	transactor.Start()
+	transactor.Start(ctx)
+
+	// Send test tx to get transactor up and running
 
 	r.waitOnCloseRoutines = func() {
 		// Close ctx's Done channel
