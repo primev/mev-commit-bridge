@@ -17,6 +17,8 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
+// TODO: unit tests
+
 type Options struct {
 	PrivateKey             *ecdsa.PrivateKey
 	HTTPPort               int

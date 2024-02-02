@@ -110,13 +110,6 @@ func (s *Transactor) getTransactOpts(ctx context.Context, chainID *big.Int) (*bi
 	if err != nil {
 		return nil, err
 	}
-	// usedNonce, err := s.settlerRegister.LastNonce()
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// if nonce <= uint64(usedNonce) {
-	// 	nonce = uint64(usedNonce + 1)
-	// }
 	auth.Nonce = big.NewInt(int64(nonce))
 
 	gasTip, err := s.settlementRawClient.SuggestGasTipCap(ctx)

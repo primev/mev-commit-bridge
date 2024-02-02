@@ -12,6 +12,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// TODO: unit tests
+
 type Listener struct {
 	sRawClient        *ethclient.Client
 	sGatewayCaller    *sg.SettlementgatewayCaller
