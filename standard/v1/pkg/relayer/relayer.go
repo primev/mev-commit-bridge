@@ -90,13 +90,16 @@ func NewRelayer(opts *Options) *Relayer {
 
 	// TODO: shared config type with eth clients, chainIds, contract addrs,
 
-	listener := listener.NewListener(
-		opts.SettlementContractAddr,
-		settlementClient,
-		opts.L1ContractAddr,
-		l1Client)
 	ctx, cancel := context.WithCancel(context.Background())
-	listenerClosed, eventChan := listener.Start(ctx)
+
+	sFilterer := listener.NewSettlementFilterer(opts.SettlementContractAddr, settlementClient)
+	sListener := listener.NewListener(settlementClient, sFilterer, false)
+	sListenerClosed, sEventChan := sListener.Start(ctx)
+
+	l1Filterer := listener.NewL1Filterer(opts.L1ContractAddr, l1Client)
+	l1Listener := listener.NewListener(l1Client, l1Filterer, true)
+	// TODO: listen to both events
+	l1ListenerClosed, _ := l1Listener.Start(ctx)
 
 	st, err := sg.NewSettlementgatewayTransactor(opts.SettlementContractAddr, settlementClient)
 	if err != nil {
@@ -107,9 +110,9 @@ func NewRelayer(opts *Options) *Relayer {
 		opts.SettlementContractAddr,
 		settlementClient,
 		st,
-		eventChan,
+		sEventChan,
 	)
-	settlementTransactor.Start(ctx)
+	stClosed := settlementTransactor.Start(ctx)
 
 	// TODO: l1 transactor
 
@@ -122,7 +125,9 @@ func NewRelayer(opts *Options) *Relayer {
 		allClosed := make(chan struct{})
 		go func() {
 			defer close(allClosed)
-			<-listenerClosed
+			<-sListenerClosed
+			<-l1ListenerClosed
+			<-stClosed
 		}()
 		<-allClosed
 	}

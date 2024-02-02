@@ -49,14 +49,18 @@ func NewTransactor(
 	}
 }
 
-func (t *Transactor) Start(ctx context.Context) {
+func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 	var err error
 	t.chainID, err = t.rawClient.ChainID(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get chain id")
 	}
 
+	doneChan := make(chan struct{})
+
 	go func() {
+		defer close(doneChan)
+
 		for event := range t.eventChan {
 			log.Info().Msgf("Received event at Transactor!%+v", event)
 			opts, err := t.getTransactOpts(ctx, t.chainID)
@@ -71,6 +75,7 @@ func (t *Transactor) Start(ctx context.Context) {
 			}
 		}
 	}()
+	return doneChan
 }
 
 func (t *Transactor) sendFinalizeTransfer(ctx context.Context, opts *bind.TransactOpts, event listener.TransferInitiatedEvent) error {
