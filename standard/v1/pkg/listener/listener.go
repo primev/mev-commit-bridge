@@ -49,13 +49,14 @@ func (listener *Listener) Start(ctx context.Context) (
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
-		log.Debug().Msg("starting listener")
+		log.Info().Msg("starting listener")
 
 		// Blocks up to this value have been handled
 		blockNumHandled := uint64(0)
 
 		if listener.sync {
 			blockNumHandled = listener.mustGetBlockNum(ctx)
+			// Fetch events up to the current block and handle them
 			opts := listener.GetFilterOpts(ctx, 0, blockNumHandled)
 			events := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
 			for _, event := range events {
@@ -72,16 +73,18 @@ func (listener *Listener) Start(ctx context.Context) (
 			case <-ticker.C:
 			}
 
-			newNum := listener.mustGetBlockNum(ctx)
-			log.Debug().Uint64("blockNum", newNum).Msg("new block number")
-
-			opts := listener.GetFilterOpts(ctx, blockNumHandled, newNum)
-			events := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
-			for _, event := range events {
-				log.Info().Msgf("Received event at Listener!%+v", event)
-				listener.EventChan <- event
+			currentBlockNum := listener.mustGetBlockNum(ctx)
+			if blockNumHandled < currentBlockNum {
+				opts := listener.GetFilterOpts(ctx, blockNumHandled+1, currentBlockNum)
+				log.Debug().Uint64("start", blockNumHandled+1).Uint64("end", currentBlockNum).Msg("block numbers")
+				events := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
+				for _, event := range events {
+					log.Info().Msgf("Received event at Listener!%+v", event)
+					listener.EventChan <- event
+				}
+				// Update blockNumHandled to reflect the last block we have processed
+				blockNumHandled = currentBlockNum
 			}
-			blockNumHandled = newNum
 		}
 	}()
 	return listener.DoneChan, listener.EventChan
@@ -95,9 +98,10 @@ func (listener *Listener) mustGetBlockNum(ctx context.Context) uint64 {
 	return blockNum
 }
 
+// GetFilterOpts returns the filter options for the listener, end is inclusive
 func (listener *Listener) GetFilterOpts(ctx context.Context, start uint64, end uint64) *bind.FilterOpts {
 	return &bind.FilterOpts{
-		Start:   start, // TODO: Confirm no off-by-one error
+		Start:   start,
 		End:     nil,
 		Context: ctx,
 	}
