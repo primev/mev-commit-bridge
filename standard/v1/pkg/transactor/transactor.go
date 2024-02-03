@@ -81,43 +81,36 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 			log.Debug().Msgf("Received signal from listener to submit transfer finalization tx on dest chain: %s. "+
 				"Where Src chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
 				t.chain, event.Chain.String(), event.Recipient, event.Amount, event.TransferIdx)
-
-			opts, err := t.getTransactOpts(ctx, t.chainID)
-			if err != nil {
-				log.Fatal().Err(err).Msg("failed to get transact opts")
-			}
+			opts := t.mustGetTransactOpts(ctx, t.chainID)
 			if t.transferAlreadyFinalized(ctx, event.TransferIdx) {
 				continue
 			}
-			err = t.sendFinalizeTransfer(ctx, opts, event)
-			if err != nil {
-				log.Fatal().Err(err).Msg("failed to send finalize transfer")
-			}
+			t.mustSendFinalizeTransfer(ctx, opts, event)
 		}
 	}()
 	return doneChan
 }
 
 // Adaptation of func from oracle repo
-func (s *Transactor) getTransactOpts(ctx context.Context, chainID *big.Int) (*bind.TransactOpts, error) {
+func (s *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) *bind.TransactOpts {
 	auth, err := bind.NewKeyedTransactorWithChainID(s.privateKey, chainID)
 	if err != nil {
-		return nil, err
+		log.Fatal().Err(err).Msg("failed to get keyed transactor")
 	}
 	nonce, err := s.rawClient.PendingNonceAt(ctx, auth.From)
 	if err != nil {
-		return nil, err
+		log.Fatal().Err(err).Msg("failed to get pending nonce")
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 
 	gasTip, err := s.rawClient.SuggestGasTipCap(ctx)
 	if err != nil {
-		return nil, err
+		log.Fatal().Err(err).Msg("failed to get gas tip cap")
 	}
 
 	gasPrice, err := s.rawClient.SuggestGasPrice(ctx)
 	if err != nil {
-		return nil, err
+		log.Fatal().Err(err).Msg("failed to get gas price")
 	}
 
 	gasFeeCap := new(big.Int).Add(gasTip, gasPrice)
@@ -125,7 +118,7 @@ func (s *Transactor) getTransactOpts(ctx context.Context, chainID *big.Int) (*bi
 	auth.GasTipCap = gasTip
 	auth.GasLimit = uint64(3000000)
 
-	return auth, nil
+	return auth
 }
 
 func (t *Transactor) transferAlreadyFinalized(ctx context.Context, transferIdx uint64) bool {
@@ -143,14 +136,14 @@ func (t *Transactor) transferAlreadyFinalized(ctx context.Context, transferIdx u
 	return false
 }
 
-func (t *Transactor) sendFinalizeTransfer(ctx context.Context, opts *bind.TransactOpts, event listener.TransferInitiatedEvent) error {
+func (t *Transactor) mustSendFinalizeTransfer(ctx context.Context, opts *bind.TransactOpts, event listener.TransferInitiatedEvent) {
 	tx, err := t.gatewayTransactor.FinalizeTransfer(opts,
 		common.HexToAddress(event.Recipient),
 		big.NewInt(int64(event.Amount)),
 		big.NewInt(int64(event.TransferIdx)),
 	)
 	if err != nil {
-		return err
+		log.Fatal().Err(err).Msg("failed to send finalize transfer tx")
 	}
 	log.Debug().Msgf("Transfer finalization tx sent, hash: %s, destChain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
 		tx.Hash().Hex(), t.chain.String(), event.Recipient, event.Amount, event.TransferIdx)
@@ -168,5 +161,4 @@ func (t *Transactor) sendFinalizeTransfer(ctx context.Context, opts *bind.Transa
 		}
 		time.Sleep(5 * time.Second) // Polling interval
 	}
-	return nil
 }

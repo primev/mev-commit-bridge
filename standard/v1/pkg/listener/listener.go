@@ -70,7 +70,7 @@ func (listener *Listener) Start(ctx context.Context) (
 		if listener.sync {
 			blockNumHandled = listener.mustGetBlockNum(ctx)
 			// Fetch events up to the current block and handle them
-			opts := listener.GetFilterOpts(ctx, 0, blockNumHandled)
+			opts := &bind.FilterOpts{Start: 0, End: &blockNumHandled, Context: ctx}
 			events := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
 			for _, event := range events {
 				log.Info().Msgf("Transfer initiated event seen by listener: %+v", event)
@@ -88,7 +88,7 @@ func (listener *Listener) Start(ctx context.Context) (
 
 			currentBlockNum := listener.mustGetBlockNum(ctx)
 			if blockNumHandled < currentBlockNum {
-				opts := listener.GetFilterOpts(ctx, blockNumHandled+1, currentBlockNum)
+				opts := &bind.FilterOpts{Start: blockNumHandled + 1, End: &currentBlockNum, Context: ctx}
 				events := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
 				log.Debug().Msgf("Fetched %d events from block %d to %d on %s",
 					len(events), blockNumHandled+1, currentBlockNum, listener.chain.String())
@@ -109,13 +109,4 @@ func (listener *Listener) mustGetBlockNum(ctx context.Context) uint64 {
 		log.Fatal().Err(err).Msg("failed to get settlement block number")
 	}
 	return blockNum
-}
-
-// GetFilterOpts returns the filter options for the listener, end is inclusive
-func (listener *Listener) GetFilterOpts(ctx context.Context, start uint64, end uint64) *bind.FilterOpts {
-	return &bind.FilterOpts{
-		Start:   start,
-		End:     nil,
-		Context: ctx,
-	}
 }
