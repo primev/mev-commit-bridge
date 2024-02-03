@@ -18,6 +18,8 @@ import (
 
 // TODO: Improve impl to wait on txes async and send in succession
 
+// TODO: Look into fact that relayer never sees "Insufficient contract balance" error on L1, even when contract has no funds
+
 type Transactor struct {
 	privateKey        *ecdsa.PrivateKey
 	rawClient         *ethclient.Client
