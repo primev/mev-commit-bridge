@@ -35,7 +35,7 @@ func (f *SettlementFilterer) ObtainTransferInitiatedEvents(opts *bind.FilterOpts
 			Recipient:   iter.Event.Recipient.String(),
 			Amount:      iter.Event.Amount.Uint64(),
 			TransferIdx: iter.Event.TransferIdx.Uint64(),
-			Chain:       settlement,
+			Chain:       Settlement,
 		})
 	}
 	return toReturn
@@ -53,7 +53,7 @@ func (f *SettlementFilterer) ObtainTransferFinalizedEvent(opts *bind.FilterOpts,
 			Recipient:       iter.Event.Recipient.String(),
 			Amount:          iter.Event.Amount.Uint64(),
 			CounterpartyIdx: iter.Event.CounterpartyIdx.Uint64(),
-			Chain:           settlement,
+			Chain:           Settlement,
 		})
 	}
 	for _, e := range events {

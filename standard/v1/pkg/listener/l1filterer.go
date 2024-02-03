@@ -35,7 +35,7 @@ func (f *L1Filterer) ObtainTransferInitiatedEvents(opts *bind.FilterOpts) []Tran
 			Recipient:   iter.Event.Recipient.String(),
 			Amount:      iter.Event.Amount.Uint64(),
 			TransferIdx: iter.Event.TransferIdx.Uint64(),
-			Chain:       l1,
+			Chain:       L1,
 		})
 	}
 	return toReturn
@@ -53,7 +53,7 @@ func (f *L1Filterer) ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counter
 			Recipient:       iter.Event.Recipient.String(),
 			Amount:          iter.Event.Amount.Uint64(),
 			CounterpartyIdx: iter.Event.CounterpartyIdx.Uint64(),
-			Chain:           l1,
+			Chain:           L1,
 		})
 	}
 	for _, e := range events {

@@ -24,6 +24,7 @@ type Transactor struct {
 	gatewayTransactor gatewayTransactor
 	gatewayFilterer   gatewayFilterer
 	chainID           *big.Int
+	chain             listener.Chain
 	eventChan         <-chan listener.TransferInitiatedEvent
 }
 
@@ -60,6 +61,16 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get chain id")
 	}
+	switch t.chainID.String() {
+	case "39999":
+		log.Info().Msg("Starting transactor for local_l1")
+		t.chain = listener.L1
+	case "17864":
+		log.Info().Msg("Starting transactor for mev-commit chain (settlement)")
+		t.chain = listener.Settlement
+	default:
+		log.Fatal().Msgf("Unsupported chain id: %s", t.chainID.String())
+	}
 
 	doneChan := make(chan struct{})
 
@@ -67,7 +78,10 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 		defer close(doneChan)
 
 		for event := range t.eventChan {
-			log.Info().Msgf("Received event at Transactor!%+v", event)
+			log.Debug().Msgf("Received signal from listener to submit transfer finalization tx on dest chain: %s. "+
+				"Where Src chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
+				t.chain, event.Chain.String(), event.Recipient, event.Amount, event.TransferIdx)
+
 			opts, err := t.getTransactOpts(ctx, t.chainID)
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to get transact opts")
@@ -122,7 +136,8 @@ func (t *Transactor) transferAlreadyFinalized(ctx context.Context, transferIdx u
 	}
 	event, found := t.gatewayFilterer.ObtainTransferFinalizedEvent(opts, transferIdx)
 	if found {
-		log.Info().Msgf("Transfer already finalized %+v", event)
+		log.Info().Msgf("Transfer already finalized on dest chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
+			t.chain.String(), event.Recipient, event.Amount, event.CounterpartyIdx)
 		return true
 	}
 	return false
@@ -137,13 +152,15 @@ func (t *Transactor) sendFinalizeTransfer(ctx context.Context, opts *bind.Transa
 	if err != nil {
 		return err
 	}
-	log.Info().Msgf("Transaction sent, hash: %s", tx.Hash().Hex())
+	log.Debug().Msgf("Transfer finalization tx sent, hash: %s, destChain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
+		tx.Hash().Hex(), t.chain.String(), event.Recipient, event.Amount, event.TransferIdx)
 
 	// Wait for the transaction to be included in a block
 	for {
 		receipt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
 		if receipt != nil {
-			log.Info().Msgf("Transaction included in block %s, hash: %s", receipt.BlockNumber, receipt.TxHash.Hex())
+			log.Info().Msgf("Transfer finalization tx included in block %s, hash: %s",
+				receipt.BlockNumber, receipt.TxHash.Hex())
 			break
 		}
 		if err != nil && err.Error() != "not found" {
