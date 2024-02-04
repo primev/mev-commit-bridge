@@ -89,6 +89,7 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 			}
 			t.mustSendFinalizeTransfer(ctx, opts, event)
 		}
+		log.Info().Msgf("Chan to transactor was closed, transactor for chain %s is exiting", t.chain)
 	}()
 	return doneChan
 }

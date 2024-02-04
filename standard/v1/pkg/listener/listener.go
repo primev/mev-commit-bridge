@@ -81,7 +81,7 @@ func (listener *Listener) Start(ctx context.Context) (
 		for {
 			select {
 			case <-ctx.Done():
-				log.Debug().Msg("stopping listener")
+				log.Info().Msgf("Listener for %s shutting down", listener.chain)
 				return
 			case <-ticker.C:
 			}
