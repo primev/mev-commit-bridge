@@ -24,7 +24,7 @@ func NewL1Filterer(
 }
 
 func (f *L1Filterer) ObtainTransferInitiatedEvents(opts *bind.FilterOpts) []TransferInitiatedEvent {
-	iter, err := f.FilterTransferInitiated(opts, nil, nil)
+	iter, err := f.FilterTransferInitiated(opts, nil, nil, nil)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to filter transfer initiated")
 	}
@@ -43,7 +43,7 @@ func (f *L1Filterer) ObtainTransferInitiatedEvents(opts *bind.FilterOpts) []Tran
 
 func (f *L1Filterer) ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx uint64) (TransferFinalizedEvent, bool) {
 	// TODO: make counterpartyIdx indexed in the contract, for now we use naive filter
-	iter, err := f.FilterTransferFinalized(opts, nil)
+	iter, err := f.FilterTransferFinalized(opts, nil, nil)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to filter transfer finalized")
 	}

@@ -4,7 +4,7 @@ go 1.21.4
 
 require (
 	github.com/ethereum/go-ethereum v1.13.5
-	github.com/primevprotocol/contracts-abi v0.0.0-20240131212711-5537161c7b6a
+	github.com/primevprotocol/contracts-abi v0.0.0-20240204013900-514e33ba7098
 	github.com/rs/zerolog v1.31.0
 	github.com/urfave/cli/v2 v2.27.1
 	golang.org/x/crypto v0.14.0
