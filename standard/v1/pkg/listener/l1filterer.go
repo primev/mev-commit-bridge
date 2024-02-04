@@ -1,6 +1,8 @@
 package listener
 
 import (
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -31,35 +33,32 @@ func (f *L1Filterer) ObtainTransferInitiatedEvents(opts *bind.FilterOpts) []Tran
 	toReturn := make([]TransferInitiatedEvent, 0)
 	for iter.Next() {
 		toReturn = append(toReturn, TransferInitiatedEvent{
-			Sender:      iter.Event.Sender.String(),
-			Recipient:   iter.Event.Recipient.String(),
-			Amount:      iter.Event.Amount.Uint64(),
-			TransferIdx: iter.Event.TransferIdx.Uint64(),
+			Sender:      iter.Event.Sender,
+			Recipient:   iter.Event.Recipient,
+			Amount:      iter.Event.Amount,
+			TransferIdx: iter.Event.TransferIdx,
 			Chain:       L1,
 		})
 	}
 	return toReturn
 }
 
-func (f *L1Filterer) ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx uint64) (TransferFinalizedEvent, bool) {
-	// TODO: make counterpartyIdx indexed in the contract, for now we use naive filter
-	iter, err := f.FilterTransferFinalized(opts, nil, nil)
+func (f *L1Filterer) ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx *big.Int) (TransferFinalizedEvent, bool) {
+	iter, err := f.FilterTransferFinalized(opts, nil, []*big.Int{counterpartyIdx})
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to filter transfer finalized")
 	}
 	events := make([]TransferFinalizedEvent, 0)
 	for iter.Next() {
 		events = append(events, TransferFinalizedEvent{
-			Recipient:       iter.Event.Recipient.String(),
-			Amount:          iter.Event.Amount.Uint64(),
-			CounterpartyIdx: iter.Event.CounterpartyIdx.Uint64(),
+			Recipient:       iter.Event.Recipient,
+			Amount:          iter.Event.Amount,
+			CounterpartyIdx: iter.Event.CounterpartyIdx,
 			Chain:           L1,
 		})
 	}
-	for _, e := range events {
-		if e.CounterpartyIdx == counterpartyIdx {
-			return e, true
-		}
+	if len(events) == 0 {
+		return TransferFinalizedEvent{}, false
 	}
-	return TransferFinalizedEvent{}, false
+	return events[0], true
 }

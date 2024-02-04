@@ -36,7 +36,7 @@ type gatewayTransactor interface {
 }
 
 type gatewayFilterer interface {
-	ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx uint64) (
+	ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx *big.Int) (
 		listener.TransferFinalizedEvent, bool)
 }
 
@@ -124,7 +124,7 @@ func (s *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) 
 	return auth
 }
 
-func (t *Transactor) transferAlreadyFinalized(ctx context.Context, transferIdx uint64) bool {
+func (t *Transactor) transferAlreadyFinalized(ctx context.Context, transferIdx *big.Int) bool {
 	// TODO: improve upon this
 	opts := &bind.FilterOpts{
 		Start: 0,
@@ -141,9 +141,9 @@ func (t *Transactor) transferAlreadyFinalized(ctx context.Context, transferIdx u
 
 func (t *Transactor) mustSendFinalizeTransfer(ctx context.Context, opts *bind.TransactOpts, event listener.TransferInitiatedEvent) {
 	tx, err := t.gatewayTransactor.FinalizeTransfer(opts,
-		common.HexToAddress(event.Recipient),
-		big.NewInt(int64(event.Amount)),
-		big.NewInt(int64(event.TransferIdx)),
+		event.Recipient,
+		event.Amount,
+		event.TransferIdx,
 	)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to send finalize transfer tx")
@@ -162,6 +162,6 @@ func (t *Transactor) mustSendFinalizeTransfer(ctx context.Context, opts *bind.Tr
 		if err != nil && err.Error() != "not found" {
 			log.Fatal().Err(err).Msg("failed to get transaction receipt")
 		}
-		time.Sleep(5 * time.Second) // Polling interval
+		time.Sleep(5 * time.Second)
 	}
 }

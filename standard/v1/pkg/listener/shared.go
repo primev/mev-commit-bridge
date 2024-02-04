@@ -1,5 +1,11 @@
 package listener
 
+import (
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/common"
+)
+
 type Chain int
 
 const (
@@ -19,16 +25,16 @@ func (c Chain) String() string {
 }
 
 type TransferInitiatedEvent struct {
-	Sender      string
-	Recipient   string
-	Amount      uint64
-	TransferIdx uint64
+	Sender      common.Address
+	Recipient   common.Address
+	Amount      *big.Int
+	TransferIdx *big.Int
 	Chain       Chain
 }
 
 type TransferFinalizedEvent struct {
-	Recipient       string
-	Amount          uint64
-	CounterpartyIdx uint64
+	Recipient       common.Address
+	Amount          *big.Int
+	CounterpartyIdx *big.Int
 	Chain           Chain
 }
