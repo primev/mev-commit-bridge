@@ -182,10 +182,17 @@ func (t *Transfer) Start(ctx context.Context) {
 
 	opts := t.mustGetTransactOpts(ctx)
 
+	// Important: tx value must match amount in transfer!
+	// TODO: Look into being able to observe error logs from failed transactions.
+	// This method of calling InitiateTransfer silently failed when tx.value != amount.
+
+	amount := big.NewInt(int64(t.Amount))
+	opts.Value = amount
+
 	tx, err := t.GatewayTransactor.InitiateTransfer(
 		opts,
 		t.DestAddress,
-		big.NewInt(int64(t.Amount)),
+		amount,
 	)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to send initiate transfer tx")
