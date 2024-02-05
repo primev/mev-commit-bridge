@@ -4,8 +4,15 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"math/big"
+	"standard-bridge/pkg/listener"
+	"time"
 
+	l1g "github.com/primevprotocol/contracts-abi/clients/L1Gateway"
+	sg "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
+
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
@@ -13,18 +20,27 @@ import (
 )
 
 type Transfer struct {
-	Amount                 uint64
-	DestAddress            common.Address
-	PrivateKey             *ecdsa.PrivateKey
-	L1Client               *ethclient.Client
-	L1ChainID              *big.Int
-	SettlementClient       *ethclient.Client
-	SettlementChainID      *big.Int
-	L1ContractAddr         common.Address
-	SettlementContractAddr common.Address
+	Amount            uint64
+	DestAddress       common.Address
+	PrivateKey        *ecdsa.PrivateKey
+	RawSrcClient      *ethclient.Client
+	SrcChainID        *big.Int
+	GatewayTransactor GatewayTransactor
+	GatewayFilterer   GatewayFilterer
 }
 
-func NewTransfer(
+type GatewayTransactor interface {
+	InitiateTransfer(opts *bind.TransactOpts, _recipient common.Address,
+		amount *big.Int) (*types.Transaction, error)
+}
+
+// TODO: consolidate w/ other file
+type GatewayFilterer interface {
+	ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx *big.Int) (
+		listener.TransferFinalizedEvent, bool)
+}
+
+func NewTransferToSettlement(
 	amount uint64,
 	destAddress common.Address,
 	privateKey *ecdsa.PrivateKey,
@@ -33,6 +49,69 @@ func NewTransfer(
 	l1ContractAddr common.Address,
 	settlementContractAddr common.Address,
 ) *Transfer {
+
+	t := &Transfer{}
+	commonSetup := t.getCommonSetup(privateKey, settlementRPCUrl, l1RPCUrl)
+
+	l1t, err := l1g.NewL1gatewayTransactor(l1ContractAddr, commonSetup.l1Client)
+	if err != nil {
+		log.Fatal().Msg("failed to create l1 gateway transactor")
+	}
+	sf := listener.NewSettlementFilterer(settlementContractAddr, commonSetup.settlementClient)
+
+	return &Transfer{
+		Amount:            amount,
+		DestAddress:       destAddress,
+		PrivateKey:        privateKey,
+		RawSrcClient:      commonSetup.l1Client,
+		SrcChainID:        commonSetup.l1ChainID,
+		GatewayTransactor: l1t,
+		GatewayFilterer:   sf,
+	}
+}
+
+func NewTransferToL1(
+	amount uint64,
+	destAddress common.Address,
+	privateKey *ecdsa.PrivateKey,
+	settlementRPCUrl string,
+	l1RPCUrl string,
+	l1ContractAddr common.Address,
+	settlementContractAddr common.Address,
+) *Transfer {
+	t := &Transfer{}
+	commonSetup := t.getCommonSetup(privateKey, settlementRPCUrl, l1RPCUrl)
+
+	st, err := sg.NewSettlementgatewayTransactor(settlementContractAddr, commonSetup.settlementClient)
+	if err != nil {
+		log.Fatal().Msg("failed to create settlement gateway transactor")
+	}
+	l1f := listener.NewL1Filterer(l1ContractAddr, commonSetup.l1Client)
+
+	return &Transfer{
+		Amount:            amount,
+		DestAddress:       destAddress,
+		PrivateKey:        privateKey,
+		RawSrcClient:      commonSetup.settlementClient,
+		SrcChainID:        commonSetup.settlementChainID,
+		GatewayTransactor: st,
+		GatewayFilterer:   l1f,
+	}
+}
+
+type commonSetup struct {
+	l1Client          *ethclient.Client
+	l1ChainID         *big.Int
+	settlementClient  *ethclient.Client
+	settlementChainID *big.Int
+}
+
+func (t *Transfer) getCommonSetup(
+	privateKey *ecdsa.PrivateKey,
+	settlementRPCUrl string,
+	l1RPCUrl string,
+) *commonSetup {
+
 	pubKey := &privateKey.PublicKey
 	pubKeyBytes := crypto.FromECDSAPub(pubKey)
 	hash := sha3.NewLegacyKeccak256()
@@ -61,31 +140,70 @@ func NewTransfer(
 	}
 	log.Info().Msg("Settlement chain id: " + settlementChainID.String())
 
-	return &Transfer{
-		Amount:                 amount,
-		DestAddress:            destAddress,
-		PrivateKey:             privateKey,
-		L1Client:               l1Client,
-		L1ChainID:              l1ChainID,
-		SettlementClient:       settlementClient,
-		SettlementChainID:      settlementChainID,
-		L1ContractAddr:         l1ContractAddr,
-		SettlementContractAddr: settlementContractAddr,
+	return &commonSetup{
+		l1Client:          l1Client,
+		l1ChainID:         l1ChainID,
+		settlementClient:  settlementClient,
+		settlementChainID: settlementChainID,
 	}
 }
 
-func (t *Transfer) BridgeToSettlement() {
-	// log transfer params
-	log.Info().Msgf("amount: %d", t.Amount)
-	log.Info().Msgf("dest address: %s", t.DestAddress.Hex())
-	log.Info().Msgf("l1 contract address: %s", t.L1ContractAddr.Hex())
-	log.Info().Msgf("settlement contract address: %s", t.SettlementContractAddr.Hex())
+// TODO: Consolidate w/ existing func
+func (t *Transfer) mustGetTransactOpts(
+	ctx context.Context,
+) *bind.TransactOpts {
+	auth, err := bind.NewKeyedTransactorWithChainID(t.PrivateKey, t.SrcChainID)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to get keyed transactor")
+	}
+	nonce, err := t.RawSrcClient.PendingNonceAt(ctx, auth.From)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to get pending nonce")
+	}
+	auth.Nonce = big.NewInt(int64(nonce))
+
+	gasTip, err := t.RawSrcClient.SuggestGasTipCap(ctx)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to get gas tip cap")
+	}
+	gasPrice, err := t.RawSrcClient.SuggestGasPrice(ctx)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to get gas price")
+	}
+
+	gasFeeCap := new(big.Int).Add(gasTip, gasPrice)
+	auth.GasFeeCap = gasFeeCap
+	auth.GasTipCap = gasTip
+	auth.GasLimit = uint64(3000000)
+	return auth
 }
 
-func (t *Transfer) BridgeToL1() {
-	// log transfer params
-	log.Info().Msgf("amount: %d", t.Amount)
-	log.Info().Msgf("dest address: %s", t.DestAddress.Hex())
-	log.Info().Msgf("l1 contract address: %s", t.L1ContractAddr.Hex())
-	log.Info().Msgf("settlement contract address: %s", t.SettlementContractAddr.Hex())
+func (t *Transfer) Start(ctx context.Context) {
+
+	opts := t.mustGetTransactOpts(ctx)
+
+	tx, err := t.GatewayTransactor.InitiateTransfer(
+		opts,
+		t.DestAddress,
+		big.NewInt(int64(t.Amount)),
+	)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to send initiate transfer tx")
+	}
+	log.Debug().Msgf("Transfer initialization tx sent, hash: %s, srcChain: %s, recipient: %s, amount: %d",
+		tx.Hash().Hex(), t.SrcChainID.String(), t.DestAddress.Hex(), t.Amount)
+
+	// Wait for the transaction to be included in a block
+	for {
+		receipt, err := t.RawSrcClient.TransactionReceipt(ctx, tx.Hash())
+		if receipt != nil {
+			log.Info().Msgf("Transfer initialization tx included in block %s, hash: %s",
+				receipt.BlockNumber, receipt.TxHash.Hex())
+			break
+		}
+		if err != nil && err.Error() != "not found" {
+			log.Fatal().Err(err).Msg("failed to get transaction receipt")
+		}
+		time.Sleep(5 * time.Second)
+	}
 }

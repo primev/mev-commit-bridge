@@ -1,12 +1,13 @@
 package main
 
 import (
+	"context"
+	"crypto/ecdsa"
 	"fmt"
 	"os"
 	"path/filepath"
+	transfer "standard-bridge/pkg/user_cli"
 	"strings"
-
-	usercli "standard-bridge/pkg/user_cli"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -78,18 +79,47 @@ func main() {
 }
 
 func bridgeToSettlement(c *cli.Context) error {
-	t := preTransfer(c)
-	t.BridgeToSettlement()
+	config := preTransfer(c)
+	t := transfer.NewTransferToSettlement(
+		config.Amount,
+		config.DestAddress,
+		config.PrivateKey,
+		config.SettlementRPCUrl,
+		config.L1RPCUrl,
+		config.L1ContractAddr,
+		config.SettlementContractAddr,
+	)
+	t.Start(context.Background())
 	return nil
 }
 
 func bridgeToL1(c *cli.Context) error {
-	t := preTransfer(c)
-	t.BridgeToL1()
+	config := preTransfer(c)
+	t := transfer.NewTransferToL1(
+		config.Amount,
+		config.DestAddress,
+		config.PrivateKey,
+		config.SettlementRPCUrl,
+		config.L1RPCUrl,
+		config.L1ContractAddr,
+		config.SettlementContractAddr,
+	)
+	t.Start(context.Background())
 	return nil
 }
 
-func preTransfer(c *cli.Context) *usercli.Transfer {
+// stuff returned by preTransfer is used in bridgeToSettlement and bridgeToL1
+type preTransferConfig struct {
+	Amount                 uint64
+	DestAddress            common.Address
+	PrivateKey             *ecdsa.PrivateKey
+	SettlementRPCUrl       string
+	L1RPCUrl               string
+	L1ContractAddr         common.Address
+	SettlementContractAddr common.Address
+}
+
+func preTransfer(c *cli.Context) preTransferConfig {
 
 	configFilePath := c.String(optionConfig.Name)
 
@@ -139,15 +169,15 @@ func preTransfer(c *cli.Context) *usercli.Transfer {
 		log.Fatal().Msg("dest-addr must be a valid hex address")
 	}
 
-	return usercli.NewTransfer(
-		uint64(amount),
-		common.HexToAddress(destAddr),
-		privKey,
-		cfg.SettlementRPCUrl,
-		cfg.L1RPCUrl,
-		common.HexToAddress(cfg.L1ContractAddr),
-		common.HexToAddress(cfg.SettlementContractAddr),
-	)
+	return preTransferConfig{
+		Amount:                 uint64(amount),
+		DestAddress:            common.HexToAddress(destAddr),
+		PrivateKey:             privKey,
+		SettlementRPCUrl:       cfg.SettlementRPCUrl,
+		L1RPCUrl:               cfg.L1RPCUrl,
+		L1ContractAddr:         common.HexToAddress(cfg.L1ContractAddr),
+		SettlementContractAddr: common.HexToAddress(cfg.SettlementContractAddr),
+	}
 }
 
 type config struct {
