@@ -111,20 +111,20 @@ func start(c *cli.Context) error {
 	var cfg config
 	buf, err := os.ReadFile(configFilePath)
 	if err != nil {
-		log.Err(err).Msg("failed to read config file at: " + configFilePath)
+		log.Fatal().Err(err).Msg("failed to read config file at: " + configFilePath)
 	}
 
 	if err := yaml.Unmarshal(buf, &cfg); err != nil {
-		log.Err(err).Msg("failed to unmarshal config file at: " + configFilePath)
+		log.Fatal().Err(err).Msg("failed to unmarshal config file at: " + configFilePath)
 	}
 
 	if err := checkConfig(&cfg); err != nil {
-		log.Err(err).Msg("invalid config file at: " + configFilePath)
+		log.Fatal().Err(err).Msg("invalid config")
 	}
 
 	lvl, err := zerolog.ParseLevel(cfg.LogLevel)
 	if err != nil {
-		log.Err(err).Msg("failed to parse log level")
+		log.Fatal().Err(err).Msg("failed to parse log level")
 	}
 
 	zerolog.SetGlobalLevel(lvl)
