@@ -106,18 +106,19 @@ func (s *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) 
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 
+	// Returns priority fee per gas
 	gasTip, err := s.rawClient.SuggestGasTipCap(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get gas tip cap")
 	}
 
+	// Returns priority fee per gas + base fee per gas
 	gasPrice, err := s.rawClient.SuggestGasPrice(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get gas price")
 	}
 
-	gasFeeCap := new(big.Int).Add(gasTip, gasPrice)
-	auth.GasFeeCap = gasFeeCap
+	auth.GasFeeCap = gasPrice
 	auth.GasTipCap = gasTip
 	auth.GasLimit = uint64(3000000)
 
