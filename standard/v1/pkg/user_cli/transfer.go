@@ -184,9 +184,8 @@ func (t *Transfer) Start(ctx context.Context) {
 	opts := t.mustGetTransactOpts(ctx)
 
 	// Important: tx value must match amount in transfer!
-	// TODO: Look into being able to observe error logs from failed transactions.
+	// TODO: Look into being able to observe error logs from failed transactions that're still included in a block.
 	// This method of calling InitiateTransfer silently failed when tx.value != amount.
-
 	amount := big.NewInt(int64(t.Amount))
 	opts.Value = amount
 
@@ -201,17 +200,27 @@ func (t *Transfer) Start(ctx context.Context) {
 	log.Debug().Msgf("Transfer initialization tx sent, hash: %s, srcChain: %s, recipient: %s, amount: %d",
 		tx.Hash().Hex(), t.SrcChainID.String(), t.DestAddress.Hex(), t.Amount)
 
-	// Wait for the transaction to be included in a block
+	var timeout = 2 * time.Minute
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	// Wait for initiation transaction to be included in a block, or timeout
 	for {
-		receipt, err := t.RawSrcClient.TransactionReceipt(ctx, tx.Hash())
-		if receipt != nil {
-			log.Info().Msgf("Transfer initialization tx included in block %s, hash: %s",
-				receipt.BlockNumber, receipt.TxHash.Hex())
-			break
+		select {
+		case <-ctx.Done():
+			log.Error().Msg("timeout while waiting for transfer initiation tx to be included in a block")
+			return
+		default:
+			receipt, err := t.RawSrcClient.TransactionReceipt(ctx, tx.Hash())
+			if receipt != nil {
+				log.Info().Msgf("Transfer initialization tx included in block %s, hash: %s",
+					receipt.BlockNumber, receipt.TxHash.Hex())
+				return
+			}
+			if err != nil && err.Error() != "not found" {
+				log.Fatal().Err(err).Msg("failed to get transaction receipt")
+			}
+			time.Sleep(5 * time.Second)
 		}
-		if err != nil && err.Error() != "not found" {
-			log.Fatal().Err(err).Msg("failed to get transaction receipt")
-		}
-		time.Sleep(5 * time.Second)
 	}
 }
