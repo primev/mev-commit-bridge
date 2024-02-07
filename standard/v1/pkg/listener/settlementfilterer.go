@@ -25,6 +25,23 @@ func NewSettlementFilterer(
 	return &SettlementFilterer{f}
 }
 
+func (f *SettlementFilterer) MustObtainTransferInitiatedBySender(opts *bind.FilterOpts, sender common.Address) TransferInitiatedEvent {
+	iter, err := f.FilterTransferInitiated(opts, []common.Address{sender}, nil, nil)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to filter transfer initiated")
+	}
+	if !iter.Next() {
+		log.Fatal().Msg("failed to obtain single transfer initiated event with sender: " + sender.String())
+	}
+	return TransferInitiatedEvent{
+		Sender:      iter.Event.Sender,
+		Recipient:   iter.Event.Recipient,
+		Amount:      iter.Event.Amount,
+		TransferIdx: iter.Event.TransferIdx,
+		Chain:       Settlement,
+	}
+}
+
 func (f *SettlementFilterer) ObtainTransferInitiatedEvents(opts *bind.FilterOpts) []TransferInitiatedEvent {
 	iter, err := f.FilterTransferInitiated(opts, nil, nil, nil)
 	if err != nil {
