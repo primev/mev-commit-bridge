@@ -11,3 +11,9 @@ user_cli: bin
 
 bin:
 	mkdir -p $@
+
+up:
+	docker-compose up --build -d
+
+down:
+	docker-compose down

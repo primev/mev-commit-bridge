@@ -1,7 +1,7 @@
 priv_key_file: "example_config/user_key" # Relative path from working dir
 log_level: "debug"
-l1_rpc_url: "http://localhost:9545"
-settlement_rpc_url: "http://localhost:8545"
+l1_rpc_url: "http://l1-bootnode:8545"
+settlement_rpc_url: "http://sl-bootnode:8545"
 l1_chain_id: 39999
 settlement_chain_id: 17864
 l1_contract_addr: "0x1a18dfEc4f2B66207b1Ad30aB5c7A0d62Ef4A40b"

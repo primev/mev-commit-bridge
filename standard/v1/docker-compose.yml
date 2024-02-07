@@ -1,0 +1,27 @@
+version: '3'
+services:
+  relayer:
+    build:
+      context: .
+      dockerfile: Dockerfile.relayer
+    networks:
+      primev_net:
+        ipv4_address: '172.29.0.102'
+      geth-poa_l1_net:
+        ipv4_address: '172.14.0.5'
+
+  user_cli:
+    build:
+      context: .
+      dockerfile: Dockerfile.user
+    networks:
+      primev_net:
+        ipv4_address: '172.29.0.103'
+      geth-poa_l1_net:
+        ipv4_address: '172.14.0.6'
+
+networks:
+  primev_net:
+    external: true
+  geth-poa_l1_net:
+    external: true
