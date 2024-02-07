@@ -1,4 +1,4 @@
-priv_key_file: "../../example_config/relayer_key" # Relative path from main.go, ideally use absolute path
+priv_key_file: "../../example_config/relayer_key" # Relative path from main.go
 http_port: 8080
 log_level: "debug"
 l1_rpc_url: "http://localhost:9545"

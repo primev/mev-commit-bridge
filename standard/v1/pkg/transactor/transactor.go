@@ -144,8 +144,13 @@ func (t *Transactor) mustSendFinalizeTransfer(ctx context.Context, opts *bind.Tr
 	log.Debug().Msgf("Transfer finalization tx sent, hash: %s, destChain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
 		tx.Hash().Hex(), t.chain.String(), event.Recipient, event.Amount, event.TransferIdx)
 
-	// Wait for the transaction to be included in a block
+	// Wait for the transaction to be included in a block, with a timeout
+	idx := 0
+	timeoutCount := 20
 	for {
+		if idx >= timeoutCount {
+			log.Fatal().Msgf("Transfer finalization tx not included in block after %d attempts", timeoutCount)
+		}
 		receipt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
 		if receipt != nil {
 			log.Info().Msgf("Transfer finalization tx included in block %s, hash: %s",
@@ -155,6 +160,7 @@ func (t *Transactor) mustSendFinalizeTransfer(ctx context.Context, opts *bind.Tr
 		if err != nil && err.Error() != "not found" {
 			log.Fatal().Err(err).Msg("failed to get transaction receipt")
 		}
+		idx++
 		time.Sleep(5 * time.Second)
 	}
 }
