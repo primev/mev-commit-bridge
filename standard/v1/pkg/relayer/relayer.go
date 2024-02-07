@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"database/sql"
 	"errors"
-	"fmt"
 	listener "standard-bridge/pkg/listener"
 	"standard-bridge/pkg/transactor"
 	"time"
@@ -18,8 +17,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/sha3"
 )
-
-// TODO: unit tests
 
 type Options struct {
 	PrivateKey             *ecdsa.PrivateKey
@@ -89,8 +86,6 @@ func NewRelayer(opts *Options) *Relayer {
 	}
 	log.Info().Msg("Settlement chain id: " + settlementChainID.String())
 
-	// TODO: server
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sFilterer := listener.NewSettlementFilterer(opts.SettlementContractAddr, settlementClient)
@@ -132,8 +127,6 @@ func NewRelayer(opts *Options) *Relayer {
 	r.waitOnCloseRoutines = func() {
 		// Close ctx's Done channel
 		cancel()
-
-		// TODO: stop server
 
 		allClosed := make(chan struct{})
 		go func() {
@@ -177,24 +170,24 @@ func (r *Relayer) TryCloseAll() (err error) {
 	}
 }
 
-func initDB(opts *Options) (db *sql.DB, err error) {
-	// Connection string
-	psqlInfo := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		opts.PgHost, opts.PgPort, opts.PgUser, opts.PgPassword, opts.PgDbname,
-	)
+// func initDB(opts *Options) (db *sql.DB, err error) {
+// 	// Connection string
+// 	psqlInfo := fmt.Sprintf(
+// 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+// 		opts.PgHost, opts.PgPort, opts.PgUser, opts.PgPassword, opts.PgDbname,
+// 	)
 
-	// Open a connection
-	db, err = sql.Open("postgres", psqlInfo)
-	if err != nil {
-		return nil, err
-	}
+// 	// Open a connection
+// 	db, err = sql.Open("postgres", psqlInfo)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	// Check the connection
-	err = db.Ping()
-	if err != nil {
-		return nil, err
-	}
+// 	// Check the connection
+// 	err = db.Ping()
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	return db, err
-}
+// 	return db, err
+// }

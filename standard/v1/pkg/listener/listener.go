@@ -9,8 +9,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// TODO: unit tests
-
 type Listener struct {
 	rawClient       *ethclient.Client
 	gatewayFilterer GatewayFilterer
