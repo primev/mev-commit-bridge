@@ -1,4 +1,4 @@
-priv_key_file: "../../example_config/user_key" # Relative path from main.go
+priv_key_file: "example_config/user_key" # Relative path from working dir
 log_level: "debug"
 l1_rpc_url: "http://localhost:9545"
 settlement_rpc_url: "http://localhost:8545"
