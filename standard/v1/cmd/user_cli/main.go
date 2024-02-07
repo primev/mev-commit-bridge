@@ -108,7 +108,6 @@ func bridgeToL1(c *cli.Context) error {
 	return nil
 }
 
-// stuff returned by preTransfer is used in bridgeToSettlement and bridgeToL1
 type preTransferConfig struct {
 	Amount                 uint64
 	DestAddress            common.Address
