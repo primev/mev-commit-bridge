@@ -2,6 +2,28 @@
 
 This document outlines multiple iteration plans for a simple lock and mint bridging protocol between L1 ethereum and the mev-commit chain.
 
+## Quickstart
+
+To bridge from L1 to the mev-commit chain, first configure a yaml file with the format found at /standard/v1/example_config/user_config.yml, example below:
+
+```yaml
+priv_key_file: "../../example_config/user_key" # Relative path from main.go
+log_level: "debug"
+l1_rpc_url: "http://localhost:9545"
+settlement_rpc_url: "http://localhost:8545"
+l1_chain_id: 39999
+settlement_chain_id: 17864
+l1_contract_addr: "0x1a18dfEc4f2B66207b1Ad30aB5c7A0d62Ef4A40b"
+settlement_contract_addr: "0xc1f93bE11D7472c9B9a4d87B41dD0a491F1fbc75"
+
+```
+
+Then use the main.go located at /standard/v1/cmd/user_cli to invoke the cli:
+
+```bash
+go run main.go bridge-to-l1 --amount <AMOUNT> --dest-addr <DEST_ADDR> --config "../../example_config/user_config.yml"
+```
+
 ## V1 High level design
 
 V1 is intended to be as simple as possible, avoiding an intermediary validation network, on-chain light clients (as is used with IBC), or merkle attestations of cross chain messages. 

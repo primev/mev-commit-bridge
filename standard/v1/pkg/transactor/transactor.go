@@ -14,12 +14,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// TODO: unit tests
-
-// TODO: Improve impl to wait on txes async and send in succession
-
-// TODO: Look into fact that relayer never sees "Insufficient contract balance" error on L1, even when contract has no funds
-
 type Transactor struct {
 	privateKey        *ecdsa.PrivateKey
 	rawClient         *ethclient.Client
@@ -94,7 +88,6 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 	return doneChan
 }
 
-// Adaptation of func from oracle repo
 func (s *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) *bind.TransactOpts {
 	auth, err := bind.NewKeyedTransactorWithChainID(s.privateKey, chainID)
 	if err != nil {
@@ -106,18 +99,19 @@ func (s *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) 
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 
+	// Returns priority fee per gas
 	gasTip, err := s.rawClient.SuggestGasTipCap(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get gas tip cap")
 	}
 
+	// Returns priority fee per gas + base fee per gas
 	gasPrice, err := s.rawClient.SuggestGasPrice(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get gas price")
 	}
 
-	gasFeeCap := new(big.Int).Add(gasTip, gasPrice)
-	auth.GasFeeCap = gasFeeCap
+	auth.GasFeeCap = gasPrice
 	auth.GasTipCap = gasTip
 	auth.GasLimit = uint64(3000000)
 
@@ -125,7 +119,6 @@ func (s *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) 
 }
 
 func (t *Transactor) transferAlreadyFinalized(ctx context.Context, transferIdx *big.Int) bool {
-	// TODO: improve upon this
 	opts := &bind.FilterOpts{
 		Start: 0,
 		End:   nil,
