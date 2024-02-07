@@ -14,12 +14,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// TODO: unit tests
-
-// TODO: Improve impl to wait on txes async and send in succession
-
-// TODO: Look into fact that relayer never sees "Insufficient contract balance" error on L1, even when contract has no funds
-
 type Transactor struct {
 	privateKey        *ecdsa.PrivateKey
 	rawClient         *ethclient.Client
@@ -94,7 +88,6 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 	return doneChan
 }
 
-// Adaptation of func from oracle repo
 func (s *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) *bind.TransactOpts {
 	auth, err := bind.NewKeyedTransactorWithChainID(s.privateKey, chainID)
 	if err != nil {
@@ -126,7 +119,6 @@ func (s *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) 
 }
 
 func (t *Transactor) transferAlreadyFinalized(ctx context.Context, transferIdx *big.Int) bool {
-	// TODO: improve upon this
 	opts := &bind.FilterOpts{
 		Start: 0,
 		End:   nil,

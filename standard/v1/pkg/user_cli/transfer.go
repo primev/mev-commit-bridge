@@ -39,7 +39,6 @@ type GatewayTransactor interface {
 		amount *big.Int) (*types.Transaction, error)
 }
 
-// TODO: consolidate w/ other file
 type GatewayFilterer interface {
 	ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx *big.Int,
 	) (listener.TransferFinalizedEvent, bool)
@@ -162,7 +161,7 @@ func (t *Transfer) getCommonSetup(
 	}
 }
 
-// TODO: Consolidate w/ existing func
+// TODO: Consolidate w/ func from transactor.go
 func (t *Transfer) mustGetTransactOpts(
 	ctx context.Context,
 ) *bind.TransactOpts {
