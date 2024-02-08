@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"math/big"
 	mathrand "math/rand"
 
@@ -16,6 +17,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+
+	datadog "github.com/DataDog/datadog-api-client-go/api/v2/datadog"
 )
 
 const (
@@ -47,7 +50,19 @@ func main() {
 
 	l1ContractAddr := common.HexToAddress(l1ContractAddrString)
 	settlementContractAddr := common.HexToAddress(settlementContractAddrString)
-	ctx := context.Background()
+
+	// DD setup
+	ctx := context.WithValue(context.Background(), datadog.ContextAPIKeys, map[string]datadog.APIKey{
+		"apiKeyAuth": {
+			Key: os.Getenv("DD_API_KEY"),
+		},
+		"appKeyAuth": {
+			Key: os.Getenv("DD_APP_KEY"),
+		},
+	})
+
+	configuration := datadog.NewConfiguration()
+	apiClient := datadog.NewAPIClient(configuration)
 
 	for {
 		// Generate a random amount of wei in [0.01, 10] ETH
@@ -73,6 +88,13 @@ func main() {
 		)
 		tSettlement.Start(ctx)
 
+		// DD Example usage
+		metricName := "bridging.success" // Change based on success or failure
+		value := 1.234                   // The metric value, e.g., elapsed time
+		tags := []string{"environment:test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"}
+
+		postMetricToDatadog(ctx, apiClient, metricName, value, tags)
+
 		// Sleep for random interval between 0 and 5 seconds
 		time.Sleep(time.Duration(mathrand.Intn(6)) * time.Second)
 
@@ -95,4 +117,27 @@ func main() {
 		// Sleep for random interval between 0 and 5 seconds
 		time.Sleep(time.Duration(mathrand.Intn(6)) * time.Second)
 	}
+}
+
+func postMetricToDatadog(ctx context.Context, client *datadog.APIClient, metricName string, value float64, tags []string) {
+	now := time.Now().Unix()
+	point := datadog.MetricPoint{
+		Timestamp: datadog.PtrInt64(now),
+		Value:     datadog.PtrFloat64(value),
+	}
+	series := datadog.MetricSeries{
+		Metric: metricName,
+		Type:   datadog.METRICINTAKETYPE_GAUGE.Ptr(),
+		Points: []datadog.MetricPoint{point},
+		Tags:   tags,
+	}
+	payload := datadog.MetricPayload{
+		Series: []datadog.MetricSeries{series},
+	}
+	_, _, err := client.MetricsApi.SubmitMetrics(ctx, payload)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `MetricsApi.SubmitMetrics`: %v\n", err)
+		return
+	}
+	fmt.Printf("Metric %s posted successfully\n", metricName)
 }

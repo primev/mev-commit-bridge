@@ -16,5 +16,8 @@ bin:
 up:
 	docker-compose up --build -d
 
+up-agent:
+	docker-compose --profile dd_agent up --build -d
+
 down:
-	docker-compose down
+	docker-compose --profile dd_agent down

@@ -40,6 +40,26 @@ make relayer
 ./bin/relayer start --config=example_config/relayer_config.yml
 ```
 
+## Relayer with emulators
+
+To run a containerized relayer with five user emulators that continuously bridge back and forth, use:
+
+```bash
+make up 
+```
+
+and to include a datadog agent:
+
+```bash
+make up-agent
+```
+
+with an `.env` file specified in this directory looking like: 
+```bash
+DD_API_KEY=<DATADOG_API_KEY>
+DD_APP_KEY=<DATADOG_APP_KEY>
+```
+
 ## V1 High level design
 
 V1 is intended to be as simple as possible, avoiding an intermediary validation network, on-chain light clients (as is used with IBC), or merkle attestations of cross chain messages. 
