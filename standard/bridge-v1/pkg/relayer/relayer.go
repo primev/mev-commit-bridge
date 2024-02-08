@@ -88,11 +88,17 @@ func NewRelayer(opts *Options) *Relayer {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	sFilterer := listener.NewSettlementFilterer(opts.SettlementContractAddr, settlementClient)
+	sFilterer, err := listener.NewSettlementFilterer(opts.SettlementContractAddr, settlementClient)
+	if err != nil {
+		log.Fatal().Msg("failed to create settlement filterer")
+	}
 	sListener := listener.NewListener(settlementClient, sFilterer, false)
 	sListenerClosed, settlementEventChan := sListener.Start(ctx)
 
-	l1Filterer := listener.NewL1Filterer(opts.L1ContractAddr, l1Client)
+	l1Filterer, err := listener.NewL1Filterer(opts.L1ContractAddr, l1Client)
+	if err != nil {
+		log.Fatal().Msg("failed to create l1 filterer")
+	}
 	l1Listener := listener.NewListener(l1Client, l1Filterer, true)
 	l1ListenerClosed, l1EventChan := l1Listener.Start(ctx)
 

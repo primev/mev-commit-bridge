@@ -79,7 +79,7 @@ func main() {
 
 		// Create and start the transfer to the settlement chain
 		startTime := time.Now()
-		tSettlement := transfer.NewTransferToSettlement(
+		tSettlement, err := transfer.NewTransferToSettlement(
 			randWeiValue,
 			transferAddr,
 			privateKey,
@@ -88,10 +88,21 @@ func main() {
 			l1ContractAddr,
 			settlementContractAddr,
 		)
-		tSettlement.Start(ctx)
+		if err != nil {
+			postMetricToDatadog(ctx, apiClient, "bridging.failure", 0,
+				[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"},
+			)
+			continue
+		}
+		err = tSettlement.Start(ctx)
+		if err != nil {
+			postMetricToDatadog(ctx, apiClient, "bridging.failure", time.Since(startTime).Seconds(),
+				[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"},
+			)
+			continue
+		}
 		completionTimeSec := time.Since(startTime).Seconds()
-		metricName := "bridging.success"
-		postMetricToDatadog(ctx, apiClient, metricName, completionTimeSec,
+		postMetricToDatadog(ctx, apiClient, "bridging.success", completionTimeSec,
 			[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"},
 		)
 
@@ -104,7 +115,7 @@ func main() {
 
 		// Create and start the transfer back to L1 with the same amount
 		startTime = time.Now()
-		tL1 := transfer.NewTransferToL1(
+		tL1, err := transfer.NewTransferToL1(
 			amountBack,
 			transferAddr,
 			privateKey,
@@ -113,10 +124,21 @@ func main() {
 			l1ContractAddr,
 			settlementContractAddr,
 		)
-		tL1.Start(ctx)
+		if err != nil {
+			postMetricToDatadog(ctx, apiClient, "bridging.failure", 0,
+				[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "39999"},
+			)
+			continue
+		}
+		err = tL1.Start(ctx)
+		if err != nil {
+			postMetricToDatadog(ctx, apiClient, "bridging.failure", time.Since(startTime).Seconds(),
+				[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "39999"},
+			)
+			continue
+		}
 		completionTimeSec = time.Since(startTime).Seconds()
-		metricName = "bridging.success"
-		postMetricToDatadog(ctx, apiClient, metricName, completionTimeSec,
+		postMetricToDatadog(ctx, apiClient, "bridging.success", completionTimeSec,
 			[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "39999"},
 		)
 

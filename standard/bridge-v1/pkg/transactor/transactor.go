@@ -31,7 +31,7 @@ type gatewayTransactor interface {
 
 type gatewayFilterer interface {
 	ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx *big.Int) (
-		listener.TransferFinalizedEvent, bool)
+		listener.TransferFinalizedEvent, bool, error)
 }
 
 func NewTransactor(
@@ -123,7 +123,11 @@ func (t *Transactor) transferAlreadyFinalized(ctx context.Context, transferIdx *
 		Start: 0,
 		End:   nil,
 	}
-	event, found := t.gatewayFilterer.ObtainTransferFinalizedEvent(opts, transferIdx)
+	event, found, err := t.gatewayFilterer.ObtainTransferFinalizedEvent(opts, transferIdx)
+	if err != nil {
+		log.Fatal().Err(err).Msg("error obtaining transfer finalized event")
+	}
+
 	if found {
 		log.Info().Msgf("Transfer already finalized on dest chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
 			t.chain.String(), event.Recipient, event.Amount, event.CounterpartyIdx)

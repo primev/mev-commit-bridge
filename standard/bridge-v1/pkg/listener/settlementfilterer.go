@@ -1,6 +1,7 @@
 package listener
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -17,18 +18,18 @@ type SettlementFilterer struct {
 func NewSettlementFilterer(
 	gatewayAddr common.Address,
 	client *ethclient.Client,
-) *SettlementFilterer {
+) (*SettlementFilterer, error) {
 	f, err := sg.NewSettlementgatewayFilterer(gatewayAddr, client)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create settlement gateway filterer")
+		return nil, fmt.Errorf("failed to create settlement filterer: %w", err)
 	}
-	return &SettlementFilterer{f}
+	return &SettlementFilterer{f}, nil
 }
 
-func (f *SettlementFilterer) MustObtainTransferInitiatedBySender(opts *bind.FilterOpts, sender common.Address) TransferInitiatedEvent {
+func (f *SettlementFilterer) MustObtainTransferInitiatedBySender(opts *bind.FilterOpts, sender common.Address) (TransferInitiatedEvent, error) {
 	iter, err := f.FilterTransferInitiated(opts, []common.Address{sender}, nil, nil)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to filter transfer initiated")
+		return TransferInitiatedEvent{}, fmt.Errorf("failed to filter transfer initiated: %w", err)
 	}
 	if !iter.Next() {
 		log.Fatal().Msg("failed to obtain single transfer initiated event with sender: " + sender.String())
@@ -39,13 +40,13 @@ func (f *SettlementFilterer) MustObtainTransferInitiatedBySender(opts *bind.Filt
 		Amount:      iter.Event.Amount,
 		TransferIdx: iter.Event.TransferIdx,
 		Chain:       Settlement,
-	}
+	}, nil
 }
 
-func (f *SettlementFilterer) ObtainTransferInitiatedEvents(opts *bind.FilterOpts) []TransferInitiatedEvent {
+func (f *SettlementFilterer) ObtainTransferInitiatedEvents(opts *bind.FilterOpts) ([]TransferInitiatedEvent, error) {
 	iter, err := f.FilterTransferInitiated(opts, nil, nil, nil)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to filter transfer initiated")
+		return nil, fmt.Errorf("failed to filter transfer initiated: %w", err)
 	}
 	toReturn := make([]TransferInitiatedEvent, 0)
 	for iter.Next() {
@@ -57,13 +58,13 @@ func (f *SettlementFilterer) ObtainTransferInitiatedEvents(opts *bind.FilterOpts
 			Chain:       Settlement,
 		})
 	}
-	return toReturn
+	return toReturn, nil
 }
 
-func (f *SettlementFilterer) ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx *big.Int) (TransferFinalizedEvent, bool) {
+func (f *SettlementFilterer) ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx *big.Int) (TransferFinalizedEvent, bool, error) {
 	iter, err := f.FilterTransferFinalized(opts, nil, []*big.Int{counterpartyIdx})
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to filter transfer finalized")
+		return TransferFinalizedEvent{}, false, fmt.Errorf("failed to filter transfer finalized: %w", err)
 	}
 	events := make([]TransferFinalizedEvent, 0)
 	for iter.Next() {
@@ -75,7 +76,7 @@ func (f *SettlementFilterer) ObtainTransferFinalizedEvent(opts *bind.FilterOpts,
 		})
 	}
 	if len(events) == 0 {
-		return TransferFinalizedEvent{}, false
+		return TransferFinalizedEvent{}, false, nil
 	}
-	return events[0], true
+	return events[0], true, nil
 }

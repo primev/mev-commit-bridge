@@ -19,7 +19,7 @@ type Listener struct {
 }
 
 type GatewayFilterer interface {
-	ObtainTransferInitiatedEvents(opts *bind.FilterOpts) []TransferInitiatedEvent
+	ObtainTransferInitiatedEvents(opts *bind.FilterOpts) ([]TransferInitiatedEvent, error)
 }
 
 func NewListener(
@@ -69,7 +69,10 @@ func (listener *Listener) Start(ctx context.Context) (
 			blockNumHandled = listener.mustGetBlockNum(ctx)
 			// Fetch events up to the current block and handle them
 			opts := &bind.FilterOpts{Start: 0, End: &blockNumHandled, Context: ctx}
-			events := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
+			events, err := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
+			if err != nil {
+				log.Fatal().Err(err).Msg("error obtaining transfer initiated events")
+			}
 			for _, event := range events {
 				log.Info().Msgf("Transfer initiated event seen by listener: %+v", event)
 				listener.EventChan <- event
@@ -87,7 +90,10 @@ func (listener *Listener) Start(ctx context.Context) (
 			currentBlockNum := listener.mustGetBlockNum(ctx)
 			if blockNumHandled < currentBlockNum {
 				opts := &bind.FilterOpts{Start: blockNumHandled + 1, End: &currentBlockNum, Context: ctx}
-				events := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
+				events, err := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
+				if err != nil {
+					log.Fatal().Err(err).Msg("error obtaining transfer initiated events")
+				}
 				log.Debug().Msgf("Fetched %d events from block %d to %d on %s",
 					len(events), blockNumHandled+1, currentBlockNum, listener.chain.String())
 				for _, event := range events {

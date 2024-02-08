@@ -81,7 +81,7 @@ func main() {
 
 func bridgeToSettlement(c *cli.Context) error {
 	config := preTransfer(c)
-	t := transfer.NewTransferToSettlement(
+	t, err := transfer.NewTransferToSettlement(
 		config.Amount,
 		config.DestAddress,
 		config.PrivateKey,
@@ -90,13 +90,19 @@ func bridgeToSettlement(c *cli.Context) error {
 		config.L1ContractAddr,
 		config.SettlementContractAddr,
 	)
-	t.Start(context.Background())
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create transfer to settlement")
+	}
+	err = t.Start(context.Background())
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to start transfer to settlement")
+	}
 	return nil
 }
 
 func bridgeToL1(c *cli.Context) error {
 	config := preTransfer(c)
-	t := transfer.NewTransferToL1(
+	t, err := transfer.NewTransferToL1(
 		config.Amount,
 		config.DestAddress,
 		config.PrivateKey,
@@ -105,7 +111,13 @@ func bridgeToL1(c *cli.Context) error {
 		config.L1ContractAddr,
 		config.SettlementContractAddr,
 	)
-	t.Start(context.Background())
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create transfer to L1")
+	}
+	err = t.Start(context.Background())
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to start transfer to L1")
+	}
 	return nil
 }
 
