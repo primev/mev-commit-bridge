@@ -4,9 +4,10 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
-	transfer "standard-bridge/pkg/user_cli"
+	transfer "standard-bridge/pkg/transfer"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -109,7 +110,7 @@ func bridgeToL1(c *cli.Context) error {
 }
 
 type preTransferConfig struct {
-	Amount                 uint64
+	Amount                 *big.Int
 	DestAddress            common.Address
 	PrivateKey             *ecdsa.PrivateKey
 	SettlementRPCUrl       string
@@ -169,7 +170,7 @@ func preTransfer(c *cli.Context) preTransferConfig {
 	}
 
 	return preTransferConfig{
-		Amount:                 uint64(amount),
+		Amount:                 big.NewInt(int64(amount)),
 		DestAddress:            common.HexToAddress(destAddr),
 		PrivateKey:             privKey,
 		SettlementRPCUrl:       cfg.SettlementRPCUrl,

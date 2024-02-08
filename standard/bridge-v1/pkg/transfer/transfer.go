@@ -1,4 +1,4 @@
-package usercli
+package transfer
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 )
 
 type Transfer struct {
-	Amount      uint64
+	Amount      *big.Int
 	DestAddress common.Address
 	PrivateKey  *ecdsa.PrivateKey
 
@@ -47,7 +47,7 @@ type GatewayFilterer interface {
 }
 
 func NewTransferToSettlement(
-	amount uint64,
+	amount *big.Int,
 	destAddress common.Address,
 	privateKey *ecdsa.PrivateKey,
 	settlementRPCUrl string,
@@ -81,7 +81,7 @@ func NewTransferToSettlement(
 }
 
 func NewTransferToL1(
-	amount uint64,
+	amount *big.Int,
 	destAddress common.Address,
 	privateKey *ecdsa.PrivateKey,
 	settlementRPCUrl string,
@@ -199,13 +199,12 @@ func (t *Transfer) Start(ctx context.Context) {
 	// Important: tx value must match amount in transfer!
 	// TODO: Look into being able to observe error logs from failed transactions that're still included in a block.
 	// This method of calling InitiateTransfer silently failed when tx.value != amount.
-	amount := big.NewInt(int64(t.Amount))
-	opts.Value = amount
+	opts.Value = t.Amount
 
 	tx, err := t.SrcTransactor.InitiateTransfer(
 		opts,
 		t.DestAddress,
-		amount,
+		t.Amount,
 	)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to send initiate transfer tx")
@@ -219,8 +218,7 @@ func (t *Transfer) Start(ctx context.Context) {
 	includedInBlock := uint64(math.MaxUint64)
 	for {
 		if idx >= timeoutCount {
-			log.Error().Msg("timeout while waiting for transfer initiation tx to be included in a block")
-			return
+			log.Fatal().Msg("timeout while waiting for transfer initiation tx to be included in a block")
 		}
 		receipt, err := t.SrcClient.TransactionReceipt(ctx, tx.Hash())
 		if receipt != nil {
@@ -251,8 +249,7 @@ func (t *Transfer) Start(ctx context.Context) {
 	idx = 0
 	for {
 		if idx >= timeoutCount {
-			log.Error().Msg("timeout while waiting for transfer finalization tx from relayer")
-			return
+			log.Fatal().Msg("timeout while waiting for transfer finalization tx from relayer")
 		}
 		opts := &bind.FilterOpts{
 			Start: 0,
