@@ -10,6 +10,7 @@ services:
       geth-poa_l1_net:
         ipv4_address: '172.14.0.5'
 
+  # Single cli bridge is inlcuded to confirm user cli is functional
   user_cli:
     build:
       context: .
