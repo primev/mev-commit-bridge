@@ -50,11 +50,15 @@ func main() {
 	ctx := context.Background()
 
 	for {
-		// Generate a random amount of wei in [0, 10 ETH]
+		// Generate a random amount of wei in [0.01, 10] ETH
 		maxWei := new(big.Int).Mul(big.NewInt(10), big.NewInt(params.Ether))
 		randWeiValue, err := rand.Int(rand.Reader, maxWei)
 		if err != nil {
 			log.Fatal().Err(err).Msg("Failed to generate random value")
+		}
+		if randWeiValue.Cmp(big.NewInt(params.Ether/100)) < 0 {
+			// Enforce minimum value of 0.01 ETH
+			randWeiValue = big.NewInt(params.Ether / 100)
 		}
 
 		// Create and start the transfer to the settlement chain
@@ -72,9 +76,9 @@ func main() {
 		// Sleep for random interval between 0 and 5 seconds
 		time.Sleep(time.Duration(mathrand.Intn(6)) * time.Second)
 
-		// Bridge back same amount minus 0.01 ETH for fees
-		pZeroOneEth := new(big.Int).Div(big.NewInt(params.Ether), big.NewInt(100))
-		amountBack := new(big.Int).Sub(randWeiValue, pZeroOneEth)
+		// Bridge back same amount minus 0.009 ETH for fees
+		pZZNineEth := big.NewInt(9 * params.Ether / 1000)
+		amountBack := new(big.Int).Sub(randWeiValue, pZZNineEth)
 
 		// Create and start the transfer back to L1 with the same amount
 		tL1 := transfer.NewTransferToL1(
