@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
 	"math/big"
 	mathrand "math/rand"
 
@@ -76,7 +75,10 @@ func main() {
 			randWeiValue = big.NewInt(params.Ether / 100)
 		}
 
+		// TODO: support persistent connections
+
 		// Create and start the transfer to the settlement chain
+		startTime := time.Now()
 		tSettlement := transfer.NewTransferToSettlement(
 			randWeiValue,
 			transferAddr,
@@ -87,13 +89,11 @@ func main() {
 			settlementContractAddr,
 		)
 		tSettlement.Start(ctx)
-
-		// DD Example usage
-		metricName := "bridging.success" // Change based on success or failure
-		value := 1.234                   // The metric value, e.g., elapsed time
-		tags := []string{"environment:test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"}
-
-		postMetricToDatadog(ctx, apiClient, metricName, value, tags)
+		completionTimeSec := time.Since(startTime).Seconds()
+		metricName := "bridging.success"
+		postMetricToDatadog(ctx, apiClient, metricName, completionTimeSec,
+			[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"},
+		)
 
 		// Sleep for random interval between 0 and 5 seconds
 		time.Sleep(time.Duration(mathrand.Intn(6)) * time.Second)
@@ -103,6 +103,7 @@ func main() {
 		amountBack := new(big.Int).Sub(randWeiValue, pZZNineEth)
 
 		// Create and start the transfer back to L1 with the same amount
+		startTime = time.Now()
 		tL1 := transfer.NewTransferToL1(
 			amountBack,
 			transferAddr,
@@ -113,6 +114,11 @@ func main() {
 			settlementContractAddr,
 		)
 		tL1.Start(ctx)
+		completionTimeSec = time.Since(startTime).Seconds()
+		metricName = "bridging.success"
+		postMetricToDatadog(ctx, apiClient, metricName, completionTimeSec,
+			[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "39999"},
+		)
 
 		// Sleep for random interval between 0 and 5 seconds
 		time.Sleep(time.Duration(mathrand.Intn(6)) * time.Second)
@@ -136,8 +142,7 @@ func postMetricToDatadog(ctx context.Context, client *datadog.APIClient, metricN
 	}
 	_, _, err := client.MetricsApi.SubmitMetrics(ctx, payload)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `MetricsApi.SubmitMetrics`: %v\n", err)
-		return
+		log.Fatal().Err(err).Msg("Failed to post metric to Datadog")
 	}
-	fmt.Printf("Metric %s posted successfully\n", metricName)
+	log.Debug().Msgf("Posted metric %s with value %f and tags %v", metricName, value, tags)
 }
