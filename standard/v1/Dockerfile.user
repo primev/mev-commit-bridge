@@ -3,7 +3,7 @@ FROM golang:1.21.4 AS builder
 WORKDIR /app
 COPY . .
 
-RUN CGO_ENABLED=0 make user_cli
+RUN CGO_ENABLED=0 make user-cli
 
 FROM alpine:latest
 

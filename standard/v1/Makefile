@@ -1,13 +1,14 @@
 .PHONY: relayer user_cli
 export CGO_ENABLED=0
 
-all: relayer user_cli
-
 relayer: bin
 	go build -o bin/relayer ./cmd/relayer
 
-user_cli: bin
+user-cli: bin
 	go build -o bin/user_cli ./cmd/user_cli
+
+user-emulator: bin
+	go build -o bin/user_emulator ./emulator
 
 bin:
 	mkdir -p $@
