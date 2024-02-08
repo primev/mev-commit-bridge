@@ -1,4 +1,4 @@
-package usercli
+package transfer
 
 import (
 	"context"

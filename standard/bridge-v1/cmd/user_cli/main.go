@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
-	transfer "standard-bridge/pkg/user_cli"
+	transfer "standard-bridge/pkg/transfer"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
