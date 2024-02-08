@@ -10,7 +10,7 @@ services:
       geth-poa_l1_net:
         ipv4_address: '172.14.0.5'
 
-  # Single cli bridge is inlcuded to confirm user cli is functional
+  # Included as regression test for user cli entrypoint
   user_cli:
     build:
       context: .
@@ -20,6 +20,71 @@ services:
         ipv4_address: '172.29.0.103'
       geth-poa_l1_net:
         ipv4_address: '172.14.0.6'
+
+  emulator_1:
+    build:
+      context: .
+      dockerfile: Dockerfile.emulator
+    environment:
+      PRIVATE_KEY: "d821c54fd6dfd4c864202c125eaedb0a1fad7f40c81863fa3038338b475ff44a"
+      ACCOUNT_ADDR: "0x0b1f1268f138aEEb12F54142B2359944904aaf6e"
+    networks:
+      primev_net:
+        ipv4_address: '172.29.0.104'
+      geth-poa_l1_net:
+        ipv4_address: '172.14.0.7'
+
+  emulator_2:
+    build:
+      context: .
+      dockerfile: Dockerfile.emulator
+    environment:
+      PRIVATE_KEY: "6e7470ba919624df632ebe77cccda95f38e9376cf2e7e3cb42726cb23457abae"
+      ACCOUNT_ADDR: "0x9D58dB6c050E0E708b06c8e40aE803b5c0a793B0"
+    networks:
+      primev_net:
+        ipv4_address: '172.29.0.105'
+      geth-poa_l1_net:
+        ipv4_address: '172.14.0.8'
+
+  emulator_3:
+    build:
+      context: .
+      dockerfile: Dockerfile.emulator
+    environment:
+      PRIVATE_KEY: "25710d3869ef44b2f026615c0734ff3f44c17d319f7fc6db318f0cacece3d575"
+      ACCOUNT_ADDR: "0x911FA3b5D45c1A5E6316830dd5B3fCcce1b421FF"
+    networks:
+      primev_net:
+        ipv4_address: '172.29.0.106'
+      geth-poa_l1_net:
+        ipv4_address: '172.14.0.9'
+
+  emulator_4:
+    build:
+      context: .
+      dockerfile: Dockerfile.emulator
+    environment:
+      PRIVATE_KEY: "a5743a07de65be93c11e1814bfcf4b00d3e49d0e84cd488e6cb98ba4410d585f"
+      ACCOUNT_ADDR: "0xAA7E52aF3c86Aa8b617670347024e86C3b26bcd8"
+    networks:
+      primev_net:
+        ipv4_address: '172.29.0.107'
+      geth-poa_l1_net:
+        ipv4_address: '172.14.0.10'
+
+  emulator_5:
+    build:
+      context: .
+      dockerfile: Dockerfile.emulator
+    environment:
+      PRIVATE_KEY: "865a133ee5b85c4f4970be2f6ac590a7c4be51b936df48028f0285bed12f1f10"
+      ACCOUNT_ADDR: "0x72F17F6a137645B774c3a115530410732019fE84"
+    networks:
+      primev_net:
+        ipv4_address: '172.29.0.108'
+      geth-poa_l1_net:
+        ipv4_address: '172.14.0.11'
 
 networks:
   primev_net:
