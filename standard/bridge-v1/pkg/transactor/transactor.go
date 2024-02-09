@@ -88,25 +88,25 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 	return doneChan
 }
 
-func (s *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) *bind.TransactOpts {
-	auth, err := bind.NewKeyedTransactorWithChainID(s.privateKey, chainID)
+func (t *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) *bind.TransactOpts {
+	auth, err := bind.NewKeyedTransactorWithChainID(t.privateKey, chainID)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get keyed transactor")
 	}
-	nonce, err := s.rawClient.PendingNonceAt(ctx, auth.From)
+	nonce, err := t.rawClient.PendingNonceAt(ctx, auth.From)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get pending nonce")
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 
 	// Returns priority fee per gas
-	gasTip, err := s.rawClient.SuggestGasTipCap(ctx)
+	gasTip, err := t.rawClient.SuggestGasTipCap(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get gas tip cap")
 	}
 
 	// Returns priority fee per gas + base fee per gas
-	gasPrice, err := s.rawClient.SuggestGasPrice(ctx)
+	gasPrice, err := t.rawClient.SuggestGasPrice(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get gas price")
 	}
