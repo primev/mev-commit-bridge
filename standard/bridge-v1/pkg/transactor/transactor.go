@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"math/big"
 	"standard-bridge/pkg/listener"
+	"standard-bridge/pkg/shared"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -72,6 +73,8 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 
 	go func() {
 		defer close(doneChan)
+
+		shared.CancelPendingTxes(ctx, t.privateKey, t.rawClient, t.chainID)
 
 		for event := range t.eventChan {
 			log.Debug().Msgf("Received signal from listener to submit transfer finalization tx on dest chain: %s. "+
@@ -149,7 +152,7 @@ func (t *Transactor) mustSendFinalizeTransfer(ctx context.Context, opts *bind.Tr
 	// Also implement retries with 10% tip increase
 
 	idx := 0
-	timeoutCount := 20
+	timeoutCount := 50
 	for {
 		if idx >= timeoutCount {
 			log.Fatal().Msgf("Transfer finalization tx not included in block after %d attempts", timeoutCount)

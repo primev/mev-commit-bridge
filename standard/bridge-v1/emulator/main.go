@@ -11,10 +11,12 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"standard-bridge/pkg/shared"
 	transfer "standard-bridge/pkg/transfer"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/params"
 
 	datadog "github.com/DataDog/datadog-api-client-go/api/v2/datadog"
@@ -62,6 +64,30 @@ func main() {
 
 	configuration := datadog.NewConfiguration()
 	apiClient := datadog.NewAPIClient(configuration)
+
+	// Construct two eth clients and cancel all pending txes on both chains
+	l1Client, err := ethclient.Dial(l1RPCUrl)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to dial l1 rpc")
+	}
+	l1ChainID, err := l1Client.ChainID(context.Background())
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to get l1 chain id")
+	}
+	log.Debug().Msg("L1 chain id: " + l1ChainID.String())
+
+	settlementClient, err := ethclient.Dial(settlementRPCUrl)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to dial settlement rpc")
+	}
+	settlementChainID, err := settlementClient.ChainID(context.Background())
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to dial settlement rpc")
+	}
+	log.Debug().Msg("Settlement chain id: " + settlementChainID.String())
+
+	shared.CancelPendingTxes(ctx, privateKey, l1Client, l1ChainID)
+	shared.CancelPendingTxes(ctx, privateKey, settlementClient, settlementChainID)
 
 	for {
 		// Generate a random amount of wei in [0.01, 10] ETH
