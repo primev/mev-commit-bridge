@@ -224,6 +224,32 @@ func checkConfig(cfg *config) error {
 	if !common.IsHexAddress(cfg.L1ContractAddr) || !common.IsHexAddress(cfg.SettlementContractAddr) {
 		return fmt.Errorf("both l1_contract_addr and settlement_contract_addr must be valid hex addresses")
 	}
+
+	// Create clients via url and cross check with expected chain id
+	l1Client, err := ethclient.Dial(cfg.L1RPCUrl)
+	if err != nil {
+		return fmt.Errorf("failed to create l1 client: %v", err)
+	}
+	obtainedL1ChainID, err := l1Client.ChainID(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to get l1 chain id: %v", err)
+	}
+	if obtainedL1ChainID.Cmp(big.NewInt(int64(cfg.L1ChainID))) != 0 {
+		log.Fatal().Msgf("l1 chain id mismatch. Expected: %d, Obtained: %d", cfg.L1ChainID, obtainedL1ChainID)
+	}
+
+	settlementClient, err := ethclient.Dial(cfg.SettlementRPCUrl)
+	if err != nil {
+		return fmt.Errorf("failed to create settlement client: %v", err)
+	}
+	obtainedSettlementChainID, err := settlementClient.ChainID(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to get settlement chain id: %v", err)
+	}
+	if obtainedSettlementChainID.Cmp(big.NewInt(int64(cfg.SettlementChainID))) != 0 {
+		log.Fatal().Msgf("settlement chain id mismatch. Expected: %d, Obtained: %d", cfg.SettlementChainID, obtainedSettlementChainID)
+	}
+
 	return nil
 }
 
