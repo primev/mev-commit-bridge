@@ -145,6 +145,9 @@ func (t *Transactor) mustSendFinalizeTransfer(ctx context.Context, opts *bind.Tr
 		tx.Hash().Hex(), t.chain.String(), event.Recipient, event.Amount, event.TransferIdx)
 
 	// Wait for the transaction to be included in a block, with a timeout
+	// TODO: Use 	"github.com/ethereum/go-ethereum/accounts/abi/bind" waitMined
+	// Also implement retries with 10% tip increase
+
 	idx := 0
 	timeoutCount := 20
 	for {
