@@ -153,8 +153,8 @@ func (t *Transactor) mustSendFinalizeTransfer(ctx context.Context, opts *bind.Tr
 		}
 		receipt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
 		if receipt != nil {
-			log.Info().Msgf("Transfer finalization tx included in block %s, hash: %s",
-				receipt.BlockNumber, receipt.TxHash.Hex())
+			log.Info().Msgf("Transfer finalization tx included in block %s, hash: %s, srcTransferIdx: %d",
+				receipt.BlockNumber, receipt.TxHash.Hex(), event.TransferIdx)
 			break
 		}
 		if err != nil && err.Error() != "not found" {
