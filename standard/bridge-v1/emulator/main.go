@@ -70,24 +70,12 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to dial l1 rpc")
 	}
-	l1ChainID, err := l1Client.ChainID(context.Background())
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get l1 chain id")
-	}
-	log.Debug().Msg("L1 chain id: " + l1ChainID.String())
-
 	settlementClient, err := ethclient.Dial(settlementRPCUrl)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to dial settlement rpc")
 	}
-	settlementChainID, err := settlementClient.ChainID(context.Background())
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to dial settlement rpc")
-	}
-	log.Debug().Msg("Settlement chain id: " + settlementChainID.String())
-
-	shared.CancelPendingTxes(ctx, privateKey, l1Client, l1ChainID)
-	shared.CancelPendingTxes(ctx, privateKey, settlementClient, settlementChainID)
+	shared.CancelPendingTxes(ctx, privateKey, l1Client)
+	shared.CancelPendingTxes(ctx, privateKey, settlementClient)
 
 	for {
 		// Generate a random amount of wei in [0.01, 10] ETH

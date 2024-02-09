@@ -12,15 +12,16 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func CancelPendingTxes(ctx context.Context, privateKey *ecdsa.PrivateKey, rawClient *ethclient.Client, chainID *big.Int) {
-	cancelAllPendingTransactions(ctx, privateKey, rawClient, chainID)
+func CancelPendingTxes(ctx context.Context, privateKey *ecdsa.PrivateKey, rawClient *ethclient.Client) {
+	cancelAllPendingTransactions(ctx, privateKey, rawClient)
 	idx := 0
 	timeoutSec := 60
 	for {
 		if idx >= timeoutSec {
 			log.Fatal().Msg("Timeout reached while waiting for pending transactions to be cancelled")
 		}
-		if !pendingTransactionsExist(ctx, privateKey, rawClient) {
+		if !PendingTransactionsExist(ctx, privateKey, rawClient) {
+			log.Info().Msg("All pending transactions for signing account have been cancelled")
 			break
 		}
 		time.Sleep(1 * time.Second)
@@ -32,8 +33,11 @@ func cancelAllPendingTransactions(
 	ctx context.Context,
 	privateKey *ecdsa.PrivateKey,
 	rawClient *ethclient.Client,
-	chainID *big.Int,
 ) {
+	chainID, err := rawClient.ChainID(ctx)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to get chain ID")
+	}
 	fromAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	currentNonce, err := rawClient.PendingNonceAt(ctx, fromAddress)
 	if err != nil {
@@ -85,6 +89,10 @@ func cancelAllPendingTransactions(
 					log.Warn().Err(err).Msgf("Retry %d: underpriced transaction for nonce %d, increasing gas price", retry+1, nonce)
 					continue // Try again with a higher gas price
 				}
+				if err.Error() == "already known" {
+					log.Warn().Err(err).Msgf("Retry %d: already known transaction for nonce %d", retry+1, nonce)
+					continue // Try again with a higher gas price
+				}
 				log.Fatal().Err(err).Msgf("Failed to send cancel transaction for nonce %d", nonce)
 				break
 			}
@@ -94,7 +102,7 @@ func cancelAllPendingTransactions(
 	}
 }
 
-func pendingTransactionsExist(ctx context.Context, privateKey *ecdsa.PrivateKey, rawClient *ethclient.Client) bool {
+func PendingTransactionsExist(ctx context.Context, privateKey *ecdsa.PrivateKey, rawClient *ethclient.Client) bool {
 	fromAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	currentNonce, err := rawClient.PendingNonceAt(ctx, fromAddress)
 	if err != nil {

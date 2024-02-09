@@ -74,7 +74,7 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 	go func() {
 		defer close(doneChan)
 
-		shared.CancelPendingTxes(ctx, t.privateKey, t.rawClient, t.chainID)
+		shared.CancelPendingTxes(ctx, t.privateKey, t.rawClient)
 
 		for event := range t.eventChan {
 			log.Debug().Msgf("Received signal from listener to submit transfer finalization tx on dest chain: %s. "+
