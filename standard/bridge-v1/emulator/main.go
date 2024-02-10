@@ -105,6 +105,7 @@ func main() {
 			postMetricToDatadog(ctx, apiClient, "bridging.failure", 0,
 				[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"},
 			)
+			time.Sleep(time.Minute)
 			continue
 		}
 		startTime := time.Now()
@@ -113,6 +114,7 @@ func main() {
 			postMetricToDatadog(ctx, apiClient, "bridging.failure", time.Since(startTime).Seconds(),
 				[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"},
 			)
+			time.Sleep(time.Minute)
 			continue
 		}
 		completionTimeSec := time.Since(startTime).Seconds()
@@ -141,6 +143,7 @@ func main() {
 			postMetricToDatadog(ctx, apiClient, "bridging.failure", 0,
 				[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "39999"},
 			)
+			time.Sleep(time.Minute)
 			continue
 		}
 		startTime = time.Now()
@@ -149,6 +152,7 @@ func main() {
 			postMetricToDatadog(ctx, apiClient, "bridging.failure", time.Since(startTime).Seconds(),
 				[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "39999"},
 			)
+			time.Sleep(time.Minute)
 			continue
 		}
 		completionTimeSec = time.Since(startTime).Seconds()
