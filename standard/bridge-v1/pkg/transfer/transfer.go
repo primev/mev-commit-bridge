@@ -3,6 +3,7 @@ package transfer
 import (
 	"context"
 	"crypto/ecdsa"
+	"fmt"
 	"math"
 	"math/big"
 	"standard-bridge/pkg/listener"
@@ -41,9 +42,9 @@ type GatewayTransactor interface {
 
 type GatewayFilterer interface {
 	ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx *big.Int,
-	) (listener.TransferFinalizedEvent, bool)
-	MustObtainTransferInitiatedBySender(opts *bind.FilterOpts, sender common.Address,
-	) listener.TransferInitiatedEvent
+	) (listener.TransferFinalizedEvent, bool, error)
+	ObtainTransferInitiatedBySender(opts *bind.FilterOpts, sender common.Address,
+	) (listener.TransferInitiatedEvent, error)
 }
 
 func NewTransferToSettlement(
@@ -54,18 +55,23 @@ func NewTransferToSettlement(
 	l1RPCUrl string,
 	l1ContractAddr common.Address,
 	settlementContractAddr common.Address,
-) *Transfer {
+) (*Transfer, error) {
 
 	t := &Transfer{}
 	commonSetup := t.getCommonSetup(privateKey, settlementRPCUrl, l1RPCUrl)
 
 	l1t, err := l1g.NewL1gatewayTransactor(l1ContractAddr, commonSetup.l1Client)
 	if err != nil {
-		log.Fatal().Msg("failed to create l1 gateway transactor")
+		return nil, err
 	}
-	l1f := listener.NewL1Filterer(l1ContractAddr, commonSetup.l1Client)
-
-	sf := listener.NewSettlementFilterer(settlementContractAddr, commonSetup.settlementClient)
+	l1f, err := listener.NewL1Filterer(l1ContractAddr, commonSetup.l1Client)
+	if err != nil {
+		return nil, err
+	}
+	sf, err := listener.NewSettlementFilterer(settlementContractAddr, commonSetup.settlementClient)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Transfer{
 		Amount:        amount,
@@ -77,7 +83,7 @@ func NewTransferToSettlement(
 		SrcFilterer:   l1f,
 		DestFilterer:  sf,
 		DestChainID:   commonSetup.settlementChainID,
-	}
+	}, nil
 }
 
 func NewTransferToL1(
@@ -88,16 +94,22 @@ func NewTransferToL1(
 	l1RPCUrl string,
 	l1ContractAddr common.Address,
 	settlementContractAddr common.Address,
-) *Transfer {
+) (*Transfer, error) {
 	t := &Transfer{}
 	commonSetup := t.getCommonSetup(privateKey, settlementRPCUrl, l1RPCUrl)
 
 	st, err := sg.NewSettlementgatewayTransactor(settlementContractAddr, commonSetup.settlementClient)
 	if err != nil {
-		log.Fatal().Msg("failed to create settlement gateway transactor")
+		return nil, fmt.Errorf("failed to create settlement gateway transactor: %s", err)
 	}
-	sf := listener.NewSettlementFilterer(settlementContractAddr, commonSetup.settlementClient)
-	l1f := listener.NewL1Filterer(l1ContractAddr, commonSetup.l1Client)
+	sf, err := listener.NewSettlementFilterer(settlementContractAddr, commonSetup.settlementClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create settlement filterer: %s", err)
+	}
+	l1f, err := listener.NewL1Filterer(l1ContractAddr, commonSetup.l1Client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create l1 filterer: %s", err)
+	}
 
 	return &Transfer{
 		Amount:        amount,
@@ -109,7 +121,7 @@ func NewTransferToL1(
 		SrcFilterer:   sf,
 		DestFilterer:  l1f,
 		DestChainID:   commonSetup.l1ChainID,
-	}
+	}, nil
 }
 
 type commonSetup struct {
@@ -192,7 +204,7 @@ func (t *Transfer) mustGetTransactOpts(
 	return auth
 }
 
-func (t *Transfer) Start(ctx context.Context) {
+func (t *Transfer) Start(ctx context.Context) error {
 
 	opts := t.mustGetTransactOpts(ctx)
 
@@ -207,7 +219,7 @@ func (t *Transfer) Start(ctx context.Context) {
 		t.Amount,
 	)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to send initiate transfer tx")
+		return fmt.Errorf("failed to initiate transfer: %s", err)
 	}
 	log.Debug().Msgf("Transfer initialization tx sent, hash: %s, srcChain: %s, recipient: %s, amount: %d",
 		tx.Hash().Hex(), t.SrcChainID.String(), t.DestAddress.Hex(), t.Amount)
@@ -218,7 +230,7 @@ func (t *Transfer) Start(ctx context.Context) {
 	includedInBlock := uint64(math.MaxUint64)
 	for {
 		if idx >= timeoutCount {
-			log.Fatal().Msg("timeout while waiting for transfer initiation tx to be included in a block")
+			return fmt.Errorf("timeout while waiting for transfer initiation tx to be included in a block")
 		}
 		receipt, err := t.SrcClient.TransactionReceipt(ctx, tx.Hash())
 		if receipt != nil {
@@ -228,7 +240,7 @@ func (t *Transfer) Start(ctx context.Context) {
 			break
 		}
 		if err != nil && err.Error() != "not found" {
-			log.Fatal().Err(err).Msg("failed to get transaction receipt")
+			return fmt.Errorf("error getting receipt for transfer initiation tx: %s", err)
 		}
 		idx++
 		time.Sleep(5 * time.Second)
@@ -236,12 +248,15 @@ func (t *Transfer) Start(ctx context.Context) {
 
 	// Obtain event on src chain, transfer idx needed for dest chain
 	if includedInBlock == math.MaxUint64 {
-		log.Fatal().Msg("failed to obtain block number for transfer initiation tx")
+		return fmt.Errorf("transfer initiation tx not included in block")
 	}
-	event := t.SrcFilterer.MustObtainTransferInitiatedBySender(&bind.FilterOpts{
+	event, err := t.SrcFilterer.ObtainTransferInitiatedBySender(&bind.FilterOpts{
 		Start: includedInBlock,
 		End:   &includedInBlock,
 	}, opts.From)
+	if err != nil {
+		return fmt.Errorf("error obtaining transfer initiated event: %s", err)
+	}
 	log.Info().Msgf("InitiateTransfer event emitted on src chain: %s, recipient: %s, amount: %d, transferIdx: %d",
 		t.SrcChainID.String(), event.Recipient, event.Amount, event.TransferIdx)
 
@@ -249,13 +264,16 @@ func (t *Transfer) Start(ctx context.Context) {
 	idx = 0
 	for {
 		if idx >= timeoutCount {
-			log.Fatal().Msg("timeout while waiting for transfer finalization tx from relayer")
+			return fmt.Errorf("timeout while waiting for transfer finalization tx from relayer")
 		}
 		opts := &bind.FilterOpts{
 			Start: 0,
 			End:   nil,
 		}
-		event, found := t.DestFilterer.ObtainTransferFinalizedEvent(opts, event.TransferIdx)
+		event, found, err := t.DestFilterer.ObtainTransferFinalizedEvent(opts, event.TransferIdx)
+		if err != nil {
+			return fmt.Errorf("error obtaining transfer finalized event: %s", err)
+		}
 		if found {
 			log.Info().Msgf("Transfer finalized on dest chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
 				t.DestChainID.String(), event.Recipient, event.Amount, event.CounterpartyIdx)
@@ -264,4 +282,5 @@ func (t *Transfer) Start(ctx context.Context) {
 		idx++
 		time.Sleep(5 * time.Second)
 	}
+	return nil
 }
