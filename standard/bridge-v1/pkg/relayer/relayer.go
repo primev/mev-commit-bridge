@@ -5,8 +5,7 @@ import (
 	"crypto/ecdsa"
 	"database/sql"
 	"errors"
-	listener "standard-bridge/pkg/listener"
-	"standard-bridge/pkg/transactor"
+	"standard-bridge/pkg/shared"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -88,25 +87,25 @@ func NewRelayer(opts *Options) *Relayer {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	sFilterer, err := listener.NewSettlementFilterer(opts.SettlementContractAddr, settlementClient)
+	sFilterer, err := shared.NewSettlementFilterer(opts.SettlementContractAddr, settlementClient)
 	if err != nil {
 		log.Fatal().Msg("failed to create settlement filterer")
 	}
-	sListener := listener.NewListener(settlementClient, sFilterer, false)
+	sListener := NewListener(settlementClient, sFilterer, false)
 	sListenerClosed, settlementEventChan := sListener.Start(ctx)
 
-	l1Filterer, err := listener.NewL1Filterer(opts.L1ContractAddr, l1Client)
+	l1Filterer, err := shared.NewL1Filterer(opts.L1ContractAddr, l1Client)
 	if err != nil {
 		log.Fatal().Msg("failed to create l1 filterer")
 	}
-	l1Listener := listener.NewListener(l1Client, l1Filterer, true)
+	l1Listener := NewListener(l1Client, l1Filterer, true)
 	l1ListenerClosed, l1EventChan := l1Listener.Start(ctx)
 
 	st, err := sg.NewSettlementgatewayTransactor(opts.SettlementContractAddr, settlementClient)
 	if err != nil {
 		log.Fatal().Msg("failed to create settlement gateway transactor")
 	}
-	settlementTransactor := transactor.NewTransactor(
+	settlementTransactor := NewTransactor(
 		opts.PrivateKey,
 		opts.SettlementContractAddr,
 		settlementClient,
@@ -120,7 +119,7 @@ func NewRelayer(opts *Options) *Relayer {
 	if err != nil {
 		log.Fatal().Msg("failed to create l1 gateway transactor")
 	}
-	l1Transactor := transactor.NewTransactor(
+	l1Transactor := NewTransactor(
 		opts.PrivateKey,
 		opts.L1ContractAddr,
 		l1Client,

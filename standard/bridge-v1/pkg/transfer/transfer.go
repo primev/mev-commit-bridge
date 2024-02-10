@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"standard-bridge/pkg/listener"
+	shared "standard-bridge/pkg/shared"
 	"time"
 
 	l1g "github.com/primevprotocol/contracts-abi/clients/L1Gateway"
@@ -14,7 +14,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
@@ -28,23 +27,11 @@ type Transfer struct {
 
 	SrcClient     *ethclient.Client
 	SrcChainID    *big.Int
-	SrcTransactor GatewayTransactor
-	SrcFilterer   GatewayFilterer
+	SrcTransactor shared.GatewayTransactor
+	SrcFilterer   shared.GatewayFilterer
 
-	DestFilterer GatewayFilterer
+	DestFilterer shared.GatewayFilterer
 	DestChainID  *big.Int
-}
-
-type GatewayTransactor interface {
-	InitiateTransfer(opts *bind.TransactOpts, _recipient common.Address,
-		amount *big.Int) (*types.Transaction, error)
-}
-
-type GatewayFilterer interface {
-	ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx *big.Int,
-	) (listener.TransferFinalizedEvent, bool, error)
-	ObtainTransferInitiatedBySender(opts *bind.FilterOpts, sender common.Address,
-	) (listener.TransferInitiatedEvent, error)
 }
 
 func NewTransferToSettlement(
@@ -64,11 +51,11 @@ func NewTransferToSettlement(
 	if err != nil {
 		return nil, err
 	}
-	l1f, err := listener.NewL1Filterer(l1ContractAddr, commonSetup.l1Client)
+	l1f, err := shared.NewL1Filterer(l1ContractAddr, commonSetup.l1Client)
 	if err != nil {
 		return nil, err
 	}
-	sf, err := listener.NewSettlementFilterer(settlementContractAddr, commonSetup.settlementClient)
+	sf, err := shared.NewSettlementFilterer(settlementContractAddr, commonSetup.settlementClient)
 	if err != nil {
 		return nil, err
 	}
@@ -102,11 +89,11 @@ func NewTransferToL1(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create settlement gateway transactor: %s", err)
 	}
-	sf, err := listener.NewSettlementFilterer(settlementContractAddr, commonSetup.settlementClient)
+	sf, err := shared.NewSettlementFilterer(settlementContractAddr, commonSetup.settlementClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create settlement filterer: %s", err)
 	}
-	l1f, err := listener.NewL1Filterer(l1ContractAddr, commonSetup.l1Client)
+	l1f, err := shared.NewL1Filterer(l1ContractAddr, commonSetup.l1Client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create l1 filterer: %s", err)
 	}
@@ -173,40 +160,12 @@ func (t *Transfer) getCommonSetup(
 	}
 }
 
-// TODO: Consolidate w/ func from transactor.go
-func (t *Transfer) mustGetTransactOpts(
-	ctx context.Context,
-) *bind.TransactOpts {
-	auth, err := bind.NewKeyedTransactorWithChainID(t.PrivateKey, t.SrcChainID)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get keyed transactor")
-	}
-	nonce, err := t.SrcClient.PendingNonceAt(ctx, auth.From)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get pending nonce")
-	}
-	auth.Nonce = big.NewInt(int64(nonce))
-
-	// Returns priority fee per gas
-	gasTip, err := t.SrcClient.SuggestGasTipCap(ctx)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get gas tip cap")
-	}
-	// Returns priority fee per gas + base fee per gas
-	gasPrice, err := t.SrcClient.SuggestGasPrice(ctx)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get gas price")
-	}
-
-	auth.GasFeeCap = gasPrice
-	auth.GasTipCap = gasTip
-	auth.GasLimit = uint64(3000000)
-	return auth
-}
-
 func (t *Transfer) Start(ctx context.Context) error {
 
-	opts := t.mustGetTransactOpts(ctx)
+	opts, err := shared.CreateTransactOpts(ctx, t.PrivateKey, t.SrcChainID, t.SrcClient)
+	if err != nil {
+		return fmt.Errorf("failed to get transact opts: %s", err)
+	}
 
 	// Important: tx value must match amount in transfer!
 	// TODO: Look into being able to observe error logs from failed transactions that're still included in a block.

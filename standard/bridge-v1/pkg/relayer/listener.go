@@ -1,7 +1,8 @@
-package listener
+package relayer
 
 import (
 	"context"
+	"standard-bridge/pkg/shared"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -11,20 +12,16 @@ import (
 
 type Listener struct {
 	rawClient       *ethclient.Client
-	gatewayFilterer GatewayFilterer
+	gatewayFilterer shared.GatewayFilterer
 	sync            bool
-	chain           Chain
+	chain           shared.Chain
 	DoneChan        chan struct{}
-	EventChan       chan TransferInitiatedEvent
-}
-
-type GatewayFilterer interface {
-	ObtainTransferInitiatedEvents(opts *bind.FilterOpts) ([]TransferInitiatedEvent, error)
+	EventChan       chan shared.TransferInitiatedEvent
 }
 
 func NewListener(
 	client *ethclient.Client,
-	gatewayFilterer GatewayFilterer,
+	gatewayFilterer shared.GatewayFilterer,
 	sync bool,
 ) *Listener {
 	return &Listener{
@@ -35,7 +32,7 @@ func NewListener(
 }
 
 func (listener *Listener) Start(ctx context.Context) (
-	<-chan struct{}, <-chan TransferInitiatedEvent,
+	<-chan struct{}, <-chan shared.TransferInitiatedEvent,
 ) {
 	chainID, err := listener.rawClient.ChainID(ctx)
 	if err != nil {
@@ -44,16 +41,16 @@ func (listener *Listener) Start(ctx context.Context) (
 	switch chainID.String() {
 	case "39999":
 		log.Info().Msg("Starting listener for local_l1")
-		listener.chain = L1
+		listener.chain = shared.L1
 	case "17864":
 		log.Info().Msg("Starting listener for mev-commit chain (settlement)")
-		listener.chain = Settlement
+		listener.chain = shared.Settlement
 	default:
 		log.Fatal().Msgf("Unsupported chain id: %s", chainID.String())
 	}
 
 	listener.DoneChan = make(chan struct{})
-	listener.EventChan = make(chan TransferInitiatedEvent, 10) // Buffer up to 10 events
+	listener.EventChan = make(chan shared.TransferInitiatedEvent, 10) // Buffer up to 10 events
 
 	go func() {
 		defer close(listener.DoneChan)
