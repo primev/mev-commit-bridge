@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	sg "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
-	"github.com/rs/zerolog/log"
 )
 
 type SettlementFilterer struct {
@@ -26,13 +25,13 @@ func NewSettlementFilterer(
 	return &SettlementFilterer{f}, nil
 }
 
-func (f *SettlementFilterer) MustObtainTransferInitiatedBySender(opts *bind.FilterOpts, sender common.Address) (TransferInitiatedEvent, error) {
+func (f *SettlementFilterer) ObtainTransferInitiatedBySender(opts *bind.FilterOpts, sender common.Address) (TransferInitiatedEvent, error) {
 	iter, err := f.FilterTransferInitiated(opts, []common.Address{sender}, nil, nil)
 	if err != nil {
 		return TransferInitiatedEvent{}, fmt.Errorf("failed to filter transfer initiated: %w", err)
 	}
 	if !iter.Next() {
-		log.Fatal().Msg("failed to obtain single transfer initiated event with sender: " + sender.String())
+		return TransferInitiatedEvent{}, fmt.Errorf("failed to obtain single transfer initiated event with sender: " + sender.String())
 	}
 	return TransferInitiatedEvent{
 		Sender:      iter.Event.Sender,

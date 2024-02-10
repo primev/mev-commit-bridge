@@ -43,7 +43,7 @@ type GatewayTransactor interface {
 type GatewayFilterer interface {
 	ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx *big.Int,
 	) (listener.TransferFinalizedEvent, bool, error)
-	MustObtainTransferInitiatedBySender(opts *bind.FilterOpts, sender common.Address,
+	ObtainTransferInitiatedBySender(opts *bind.FilterOpts, sender common.Address,
 	) (listener.TransferInitiatedEvent, error)
 }
 
@@ -250,7 +250,7 @@ func (t *Transfer) Start(ctx context.Context) error {
 	if includedInBlock == math.MaxUint64 {
 		return fmt.Errorf("transfer initiation tx not included in block")
 	}
-	event, err := t.SrcFilterer.MustObtainTransferInitiatedBySender(&bind.FilterOpts{
+	event, err := t.SrcFilterer.ObtainTransferInitiatedBySender(&bind.FilterOpts{
 		Start: includedInBlock,
 		End:   &includedInBlock,
 	}, opts.From)
