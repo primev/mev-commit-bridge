@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"math/big"
 	"standard-bridge/pkg/listener"
+	"standard-bridge/pkg/shared"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -73,6 +74,8 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 	go func() {
 		defer close(doneChan)
 
+		shared.CancelPendingTxes(ctx, t.privateKey, t.rawClient)
+
 		for event := range t.eventChan {
 			log.Debug().Msgf("Received signal from listener to submit transfer finalization tx on dest chain: %s. "+
 				"Where Src chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
@@ -88,25 +91,25 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 	return doneChan
 }
 
-func (s *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) *bind.TransactOpts {
-	auth, err := bind.NewKeyedTransactorWithChainID(s.privateKey, chainID)
+func (t *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) *bind.TransactOpts {
+	auth, err := bind.NewKeyedTransactorWithChainID(t.privateKey, chainID)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get keyed transactor")
 	}
-	nonce, err := s.rawClient.PendingNonceAt(ctx, auth.From)
+	nonce, err := t.rawClient.PendingNonceAt(ctx, auth.From)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get pending nonce")
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 
 	// Returns priority fee per gas
-	gasTip, err := s.rawClient.SuggestGasTipCap(ctx)
+	gasTip, err := t.rawClient.SuggestGasTipCap(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get gas tip cap")
 	}
 
 	// Returns priority fee per gas + base fee per gas
-	gasPrice, err := s.rawClient.SuggestGasPrice(ctx)
+	gasPrice, err := t.rawClient.SuggestGasPrice(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get gas price")
 	}
@@ -149,16 +152,19 @@ func (t *Transactor) mustSendFinalizeTransfer(ctx context.Context, opts *bind.Tr
 		tx.Hash().Hex(), t.chain.String(), event.Recipient, event.Amount, event.TransferIdx)
 
 	// Wait for the transaction to be included in a block, with a timeout
+	// TODO: Use 	"github.com/ethereum/go-ethereum/accounts/abi/bind" waitMined
+	// Also implement retries with 10% tip increase
+
 	idx := 0
-	timeoutCount := 20
+	timeoutCount := 50
 	for {
 		if idx >= timeoutCount {
 			log.Fatal().Msgf("Transfer finalization tx not included in block after %d attempts", timeoutCount)
 		}
 		receipt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
 		if receipt != nil {
-			log.Info().Msgf("Transfer finalization tx included in block %s, hash: %s",
-				receipt.BlockNumber, receipt.TxHash.Hex())
+			log.Info().Msgf("Transfer finalization tx included in block %s, hash: %s, srcTransferIdx: %d",
+				receipt.BlockNumber, receipt.TxHash.Hex(), event.TransferIdx)
 			break
 		}
 		if err != nil && err.Error() != "not found" {

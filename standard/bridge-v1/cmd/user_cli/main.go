@@ -7,11 +7,13 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"standard-bridge/pkg/shared"
 	transfer "standard-bridge/pkg/transfer"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
@@ -46,6 +48,10 @@ func main() {
 						Usage:    "Destination address on the mev-commit (settlement) chain",
 						Required: true,
 					},
+					&cli.BoolFlag{
+						Name:  "cancel-pending",
+						Usage: "Automatically cancel existing pending transactions",
+					},
 					optionConfig,
 				},
 				Action: func(c *cli.Context) error {
@@ -66,6 +72,10 @@ func main() {
 						Usage:    "Destination address on L1",
 						Required: true,
 					},
+					&cli.BoolFlag{
+						Name:  "cancel-pending",
+						Usage: "Automatically cancel existing pending transactions",
+					},
 					optionConfig,
 				},
 				Action: func(c *cli.Context) error {
@@ -81,6 +91,8 @@ func main() {
 
 func bridgeToSettlement(c *cli.Context) error {
 	config := preTransfer(c)
+	autoCancel := c.Bool("cancel-pending")
+	handlePendingTxes(context.Background(), config.PrivateKey, config.L1RPCUrl, autoCancel)
 	t, err := transfer.NewTransferToSettlement(
 		config.Amount,
 		config.DestAddress,
@@ -102,6 +114,8 @@ func bridgeToSettlement(c *cli.Context) error {
 
 func bridgeToL1(c *cli.Context) error {
 	config := preTransfer(c)
+	autoCancel := c.Bool("cancel-pending")
+	handlePendingTxes(context.Background(), config.PrivateKey, config.SettlementRPCUrl, autoCancel)
 	t, err := transfer.NewTransferToL1(
 		config.Amount,
 		config.DestAddress,
@@ -222,5 +236,62 @@ func checkConfig(cfg *config) error {
 	if !common.IsHexAddress(cfg.L1ContractAddr) || !common.IsHexAddress(cfg.SettlementContractAddr) {
 		return fmt.Errorf("both l1_contract_addr and settlement_contract_addr must be valid hex addresses")
 	}
+
+	// Create clients via url and cross check with expected chain id
+	l1Client, err := ethclient.Dial(cfg.L1RPCUrl)
+	if err != nil {
+		return fmt.Errorf("failed to create l1 client: %v", err)
+	}
+	obtainedL1ChainID, err := l1Client.ChainID(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to get l1 chain id: %v", err)
+	}
+	if obtainedL1ChainID.Cmp(big.NewInt(int64(cfg.L1ChainID))) != 0 {
+		log.Fatal().Msgf("l1 chain id mismatch. Expected: %d, Obtained: %d", cfg.L1ChainID, obtainedL1ChainID)
+	}
+
+	settlementClient, err := ethclient.Dial(cfg.SettlementRPCUrl)
+	if err != nil {
+		return fmt.Errorf("failed to create settlement client: %v", err)
+	}
+	obtainedSettlementChainID, err := settlementClient.ChainID(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to get settlement chain id: %v", err)
+	}
+	if obtainedSettlementChainID.Cmp(big.NewInt(int64(cfg.SettlementChainID))) != 0 {
+		log.Fatal().Msgf("settlement chain id mismatch. Expected: %d, Obtained: %d", cfg.SettlementChainID, obtainedSettlementChainID)
+	}
+
 	return nil
+}
+
+func handlePendingTxes(
+	ctx context.Context,
+	privateKey *ecdsa.PrivateKey,
+	url string,
+	autoCancel bool,
+) {
+	ethClient, err := ethclient.Dial(url)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to connect to eth client")
+	}
+	if !shared.PendingTransactionsExist(ctx, privateKey, ethClient) {
+		return
+	}
+	if autoCancel {
+		log.Info().Msg("Automatically cancelling existing pending transactions.")
+		shared.CancelPendingTxes(ctx, privateKey, ethClient)
+		return
+	}
+	fmt.Println("Pending transactions exist for signing account. Do you want to cancel them? (y/n)")
+	var response string
+	_, err = fmt.Scanln(&response)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to read user input")
+	}
+	if strings.ToLower(response) == "y" {
+		shared.CancelPendingTxes(ctx, privateKey, ethClient)
+		return
+	}
+	log.Fatal().Msg("User chose not to cancel pending transactions. Exiting.")
 }

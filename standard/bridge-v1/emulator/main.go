@@ -11,10 +11,12 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"standard-bridge/pkg/shared"
 	transfer "standard-bridge/pkg/transfer"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/params"
 
 	datadog "github.com/DataDog/datadog-api-client-go/api/v2/datadog"
@@ -62,6 +64,18 @@ func main() {
 
 	configuration := datadog.NewConfiguration()
 	apiClient := datadog.NewAPIClient(configuration)
+
+	// Construct two eth clients and cancel all pending txes on both chains
+	l1Client, err := ethclient.Dial(l1RPCUrl)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to dial l1 rpc")
+	}
+	settlementClient, err := ethclient.Dial(settlementRPCUrl)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to dial settlement rpc")
+	}
+	shared.CancelPendingTxes(ctx, privateKey, l1Client)
+	shared.CancelPendingTxes(ctx, privateKey, settlementClient)
 
 	for {
 		// Generate a random amount of wei in [0.01, 10] ETH

@@ -226,7 +226,7 @@ func (t *Transfer) Start(ctx context.Context) error {
 
 	// Wait for initiation transaction to be included in a block, or timeout
 	idx := 0
-	timeoutCount := 20
+	timeoutCount := 50
 	includedInBlock := uint64(math.MaxUint64)
 	for {
 		if idx >= timeoutCount {
