@@ -89,21 +89,27 @@ func NewRelayer(opts *Options) *Relayer {
 
 	sFilterer, err := shared.NewSettlementFilterer(opts.SettlementContractAddr, settlementClient)
 	if err != nil {
-		log.Fatal().Msg("failed to create settlement filterer")
+		log.Fatal().Err(err).Msg("failed to create settlement filterer")
 	}
 	sListener := NewListener(settlementClient, sFilterer, false)
-	sListenerClosed, settlementEventChan := sListener.Start(ctx)
+	sListenerClosed, settlementEventChan, err := sListener.Start(ctx)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to start settlement listener")
+	}
 
 	l1Filterer, err := shared.NewL1Filterer(opts.L1ContractAddr, l1Client)
 	if err != nil {
-		log.Fatal().Msg("failed to create l1 filterer")
+		log.Fatal().Err(err).Msg("failed to create l1 filterer")
 	}
 	l1Listener := NewListener(l1Client, l1Filterer, true)
-	l1ListenerClosed, l1EventChan := l1Listener.Start(ctx)
+	l1ListenerClosed, l1EventChan, err := l1Listener.Start(ctx)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to start l1 listener")
+	}
 
 	st, err := sg.NewSettlementgatewayTransactor(opts.SettlementContractAddr, settlementClient)
 	if err != nil {
-		log.Fatal().Msg("failed to create settlement gateway transactor")
+		log.Fatal().Err(err).Msg("failed to create settlement gateway transactor")
 	}
 	settlementTransactor := NewTransactor(
 		opts.PrivateKey,
@@ -117,7 +123,7 @@ func NewRelayer(opts *Options) *Relayer {
 
 	l1t, err := l1g.NewL1gatewayTransactor(opts.L1ContractAddr, l1Client)
 	if err != nil {
-		log.Fatal().Msg("failed to create l1 gateway transactor")
+		log.Fatal().Err(err).Msg("failed to create l1 gateway transactor")
 	}
 	l1Transactor := NewTransactor(
 		opts.PrivateKey,
