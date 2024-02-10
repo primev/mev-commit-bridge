@@ -21,17 +21,17 @@ import (
 )
 
 type Transfer struct {
-	Amount      *big.Int
-	DestAddress common.Address
-	PrivateKey  *ecdsa.PrivateKey
+	amount      *big.Int
+	destAddress common.Address
+	privateKey  *ecdsa.PrivateKey
 
-	SrcClient     *ethclient.Client
-	SrcChainID    *big.Int
-	SrcTransactor shared.GatewayTransactor
-	SrcFilterer   shared.GatewayFilterer
+	srcClient     *ethclient.Client
+	srcChainID    *big.Int
+	srcTransactor shared.GatewayTransactor
+	srcFilterer   shared.GatewayFilterer
 
-	DestFilterer shared.GatewayFilterer
-	DestChainID  *big.Int
+	destFilterer shared.GatewayFilterer
+	destChainID  *big.Int
 }
 
 func NewTransferToSettlement(
@@ -61,15 +61,15 @@ func NewTransferToSettlement(
 	}
 
 	return &Transfer{
-		Amount:        amount,
-		DestAddress:   destAddress,
-		PrivateKey:    privateKey,
-		SrcClient:     commonSetup.l1Client,
-		SrcChainID:    commonSetup.l1ChainID,
-		SrcTransactor: l1t,
-		SrcFilterer:   l1f,
-		DestFilterer:  sf,
-		DestChainID:   commonSetup.settlementChainID,
+		amount:        amount,
+		destAddress:   destAddress,
+		privateKey:    privateKey,
+		srcClient:     commonSetup.l1Client,
+		srcChainID:    commonSetup.l1ChainID,
+		srcTransactor: l1t,
+		srcFilterer:   l1f,
+		destFilterer:  sf,
+		destChainID:   commonSetup.settlementChainID,
 	}, nil
 }
 
@@ -99,15 +99,15 @@ func NewTransferToL1(
 	}
 
 	return &Transfer{
-		Amount:        amount,
-		DestAddress:   destAddress,
-		PrivateKey:    privateKey,
-		SrcClient:     commonSetup.settlementClient,
-		SrcChainID:    commonSetup.settlementChainID,
-		SrcTransactor: st,
-		SrcFilterer:   sf,
-		DestFilterer:  l1f,
-		DestChainID:   commonSetup.l1ChainID,
+		amount:        amount,
+		destAddress:   destAddress,
+		privateKey:    privateKey,
+		srcClient:     commonSetup.settlementClient,
+		srcChainID:    commonSetup.settlementChainID,
+		srcTransactor: st,
+		srcFilterer:   sf,
+		destFilterer:  l1f,
+		destChainID:   commonSetup.l1ChainID,
 	}, nil
 }
 
@@ -162,7 +162,7 @@ func (t *Transfer) getCommonSetup(
 
 func (t *Transfer) Start(ctx context.Context) error {
 
-	opts, err := shared.CreateTransactOpts(ctx, t.PrivateKey, t.SrcChainID, t.SrcClient)
+	opts, err := shared.CreateTransactOpts(ctx, t.privateKey, t.srcChainID, t.srcClient)
 	if err != nil {
 		return fmt.Errorf("failed to get transact opts: %s", err)
 	}
@@ -170,18 +170,18 @@ func (t *Transfer) Start(ctx context.Context) error {
 	// Important: tx value must match amount in transfer!
 	// TODO: Look into being able to observe error logs from failed transactions that're still included in a block.
 	// This method of calling InitiateTransfer silently failed when tx.value != amount.
-	opts.Value = t.Amount
+	opts.Value = t.amount
 
-	tx, err := t.SrcTransactor.InitiateTransfer(
+	tx, err := t.srcTransactor.InitiateTransfer(
 		opts,
-		t.DestAddress,
-		t.Amount,
+		t.destAddress,
+		t.amount,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to initiate transfer: %s", err)
 	}
 	log.Debug().Msgf("Transfer initialization tx sent, hash: %s, srcChain: %s, recipient: %s, amount: %d",
-		tx.Hash().Hex(), t.SrcChainID.String(), t.DestAddress.Hex(), t.Amount)
+		tx.Hash().Hex(), t.srcChainID.String(), t.destAddress.Hex(), t.amount)
 
 	// Wait for initiation transaction to be included in a block, or timeout
 	idx := 0
@@ -191,7 +191,7 @@ func (t *Transfer) Start(ctx context.Context) error {
 		if idx >= timeoutCount {
 			return fmt.Errorf("timeout while waiting for transfer initiation tx to be included in a block")
 		}
-		receipt, err := t.SrcClient.TransactionReceipt(ctx, tx.Hash())
+		receipt, err := t.srcClient.TransactionReceipt(ctx, tx.Hash())
 		if receipt != nil {
 			log.Info().Msgf("Transfer initialization tx included in block %s, hash: %s",
 				receipt.BlockNumber, receipt.TxHash.Hex())
@@ -209,7 +209,7 @@ func (t *Transfer) Start(ctx context.Context) error {
 	if includedInBlock == math.MaxUint64 {
 		return fmt.Errorf("transfer initiation tx not included in block")
 	}
-	event, err := t.SrcFilterer.ObtainTransferInitiatedBySender(&bind.FilterOpts{
+	event, err := t.srcFilterer.ObtainTransferInitiatedBySender(&bind.FilterOpts{
 		Start: includedInBlock,
 		End:   &includedInBlock,
 	}, opts.From)
@@ -217,7 +217,7 @@ func (t *Transfer) Start(ctx context.Context) error {
 		return fmt.Errorf("error obtaining transfer initiated event: %s", err)
 	}
 	log.Info().Msgf("InitiateTransfer event emitted on src chain: %s, recipient: %s, amount: %d, transferIdx: %d",
-		t.SrcChainID.String(), event.Recipient, event.Amount, event.TransferIdx)
+		t.srcChainID.String(), event.Recipient, event.Amount, event.TransferIdx)
 
 	log.Debug().Msgf("Waiting for transfer finalization tx from relayer")
 	idx = 0
@@ -229,13 +229,13 @@ func (t *Transfer) Start(ctx context.Context) error {
 			Start: 0,
 			End:   nil,
 		}
-		event, found, err := t.DestFilterer.ObtainTransferFinalizedEvent(opts, event.TransferIdx)
+		event, found, err := t.destFilterer.ObtainTransferFinalizedEvent(opts, event.TransferIdx)
 		if err != nil {
 			return fmt.Errorf("error obtaining transfer finalized event: %s", err)
 		}
 		if found {
 			log.Info().Msgf("Transfer finalized on dest chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
-				t.DestChainID.String(), event.Recipient, event.Amount, event.CounterpartyIdx)
+				t.destChainID.String(), event.Recipient, event.Amount, event.CounterpartyIdx)
 			break
 		}
 		idx++
