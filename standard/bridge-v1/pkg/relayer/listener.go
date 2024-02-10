@@ -92,7 +92,8 @@ func (listener *Listener) Start(ctx context.Context) (
 			currentBlockNum, err := listener.obtainBlockNum(ctx)
 			if err != nil {
 				// TODO: Secondary url if rpc fails. For now just start over...
-				log.Error().Err(err).Msg("failed to obtain block number. Listener restarting from block 0...")
+				log.Error().Err(err).Msg("failed to obtain block number")
+				log.Warn().Msg("Listener restarting from block 0...")
 				blockNumHandled = 0
 				continue
 			}
@@ -103,7 +104,7 @@ func (listener *Listener) Start(ctx context.Context) (
 					// TODO: Secondary url if rpc fails. For now just start over...
 					log.Error().Err(err).Msgf("failed to fetch transfer initiated events from block %d to %d on %s",
 						blockNumHandled+1, currentBlockNum, listener.chain.String())
-					log.Error().Msg("Listener restarting from block 0...")
+					log.Warn().Msg("Listener restarting from block 0...")
 					blockNumHandled = 0
 					continue
 				}
