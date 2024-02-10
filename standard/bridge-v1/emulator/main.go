@@ -92,7 +92,6 @@ func main() {
 		// TODO: support persistent connections
 
 		// Create and start the transfer to the settlement chain
-		startTime := time.Now()
 		tSettlement, err := transfer.NewTransferToSettlement(
 			randWeiValue,
 			transferAddr,
@@ -108,6 +107,7 @@ func main() {
 			)
 			continue
 		}
+		startTime := time.Now()
 		err = tSettlement.Start(ctx)
 		if err != nil {
 			postMetricToDatadog(ctx, apiClient, "bridging.failure", time.Since(startTime).Seconds(),
@@ -128,7 +128,6 @@ func main() {
 		amountBack := new(big.Int).Sub(randWeiValue, pZZNineEth)
 
 		// Create and start the transfer back to L1 with the same amount
-		startTime = time.Now()
 		tL1, err := transfer.NewTransferToL1(
 			amountBack,
 			transferAddr,
@@ -144,6 +143,7 @@ func main() {
 			)
 			continue
 		}
+		startTime = time.Now()
 		err = tL1.Start(ctx)
 		if err != nil {
 			postMetricToDatadog(ctx, apiClient, "bridging.failure", time.Since(startTime).Seconds(),
