@@ -3,14 +3,51 @@ package shared
 import (
 	"context"
 	"crypto/ecdsa"
+	"fmt"
 	"math/big"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
 )
+
+func CreateTransactOpts(
+	ctx context.Context,
+	privateKey *ecdsa.PrivateKey,
+	srcChainID *big.Int,
+	srcClient *ethclient.Client,
+) (*bind.TransactOpts, error) {
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, srcChainID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create transactor: %w", err)
+	}
+
+	fromAddress := auth.From
+	nonce, err := srcClient.PendingNonceAt(ctx, fromAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pending nonce: %w", err)
+	}
+	auth.Nonce = big.NewInt(int64(nonce))
+
+	// Returns priority fee per gas
+	gasTip, err := srcClient.SuggestGasTipCap(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get gas tip cap: %w", err)
+	}
+	// Returns priority fee per gas + base fee per gas
+	gasPrice, err := srcClient.SuggestGasPrice(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get gas price: %w", err)
+	}
+
+	auth.GasFeeCap = gasPrice
+	auth.GasTipCap = gasTip
+	auth.GasLimit = uint64(3000000)
+	return auth, nil
+}
 
 func CancelPendingTxes(ctx context.Context, privateKey *ecdsa.PrivateKey, rawClient *ethclient.Client) {
 	cancelAllPendingTransactions(ctx, privateKey, rawClient)

@@ -1,4 +1,4 @@
-package listener
+package shared
 
 import (
 	"fmt"
@@ -25,7 +25,10 @@ func NewSettlementFilterer(
 	return &SettlementFilterer{f}, nil
 }
 
-func (f *SettlementFilterer) ObtainTransferInitiatedBySender(opts *bind.FilterOpts, sender common.Address) (TransferInitiatedEvent, error) {
+func (f *SettlementFilterer) ObtainTransferInitiatedBySender(
+	opts *bind.FilterOpts,
+	sender common.Address,
+) (TransferInitiatedEvent, error) {
 	iter, err := f.FilterTransferInitiated(opts, []common.Address{sender}, nil, nil)
 	if err != nil {
 		return TransferInitiatedEvent{}, fmt.Errorf("failed to filter transfer initiated: %w", err)
@@ -42,7 +45,9 @@ func (f *SettlementFilterer) ObtainTransferInitiatedBySender(opts *bind.FilterOp
 	}, nil
 }
 
-func (f *SettlementFilterer) ObtainTransferInitiatedEvents(opts *bind.FilterOpts) ([]TransferInitiatedEvent, error) {
+func (f *SettlementFilterer) ObtainTransferInitiatedEvents(
+	opts *bind.FilterOpts,
+) ([]TransferInitiatedEvent, error) {
 	iter, err := f.FilterTransferInitiated(opts, nil, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter transfer initiated: %w", err)
@@ -60,7 +65,10 @@ func (f *SettlementFilterer) ObtainTransferInitiatedEvents(opts *bind.FilterOpts
 	return toReturn, nil
 }
 
-func (f *SettlementFilterer) ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx *big.Int) (TransferFinalizedEvent, bool, error) {
+func (f *SettlementFilterer) ObtainTransferFinalizedEvent(
+	opts *bind.FilterOpts,
+	counterpartyIdx *big.Int,
+) (TransferFinalizedEvent, bool, error) {
 	iter, err := f.FilterTransferFinalized(opts, nil, []*big.Int{counterpartyIdx})
 	if err != nil {
 		return TransferFinalizedEvent{}, false, fmt.Errorf("failed to filter transfer finalized: %w", err)

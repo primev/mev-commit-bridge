@@ -1,16 +1,14 @@
-package transactor
+package relayer
 
 import (
 	"context"
 	"crypto/ecdsa"
 	"math/big"
-	"standard-bridge/pkg/listener"
 	"standard-bridge/pkg/shared"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
 )
@@ -18,30 +16,20 @@ import (
 type Transactor struct {
 	privateKey        *ecdsa.PrivateKey
 	rawClient         *ethclient.Client
-	gatewayTransactor gatewayTransactor
-	gatewayFilterer   gatewayFilterer
+	gatewayTransactor shared.GatewayTransactor
+	gatewayFilterer   shared.GatewayFilterer
 	chainID           *big.Int
-	chain             listener.Chain
-	eventChan         <-chan listener.TransferInitiatedEvent
-}
-
-type gatewayTransactor interface {
-	FinalizeTransfer(opts *bind.TransactOpts, _recipient common.Address,
-		_amount *big.Int, _counterpartyIdx *big.Int) (*types.Transaction, error)
-}
-
-type gatewayFilterer interface {
-	ObtainTransferFinalizedEvent(opts *bind.FilterOpts, counterpartyIdx *big.Int) (
-		listener.TransferFinalizedEvent, bool, error)
+	chain             shared.Chain
+	eventChan         <-chan shared.TransferInitiatedEvent
 }
 
 func NewTransactor(
 	pk *ecdsa.PrivateKey,
 	gatewayAddr common.Address,
 	ethClient *ethclient.Client,
-	gatewayTransactor gatewayTransactor,
-	gatewayFilterer gatewayFilterer,
-	eventChan <-chan listener.TransferInitiatedEvent,
+	gatewayTransactor shared.GatewayTransactor,
+	gatewayFilterer shared.GatewayFilterer,
+	eventChan <-chan shared.TransferInitiatedEvent,
 ) *Transactor {
 	return &Transactor{
 		privateKey:        pk,
@@ -52,7 +40,10 @@ func NewTransactor(
 	}
 }
 
-func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
+func (t *Transactor) Start(
+	ctx context.Context,
+) <-chan struct{} {
+
 	var err error
 	t.chainID, err = t.rawClient.ChainID(ctx)
 	if err != nil {
@@ -61,10 +52,10 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 	switch t.chainID.String() {
 	case "39999":
 		log.Info().Msg("Starting transactor for local_l1")
-		t.chain = listener.L1
+		t.chain = shared.L1
 	case "17864":
 		log.Info().Msg("Starting transactor for mev-commit chain (settlement)")
-		t.chain = listener.Settlement
+		t.chain = shared.Settlement
 	default:
 		log.Fatal().Msgf("Unsupported chain id: %s", t.chainID.String())
 	}
@@ -80,7 +71,10 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 			log.Debug().Msgf("Received signal from listener to submit transfer finalization tx on dest chain: %s. "+
 				"Where Src chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
 				t.chain, event.Chain.String(), event.Recipient, event.Amount, event.TransferIdx)
-			opts := t.mustGetTransactOpts(ctx, t.chainID)
+			opts, err := shared.CreateTransactOpts(ctx, t.privateKey, t.chainID, t.rawClient)
+			if err != nil {
+				log.Fatal().Err(err).Msg("failed to get transact opts")
+			}
 			if t.transferAlreadyFinalized(ctx, event.TransferIdx) {
 				continue
 			}
@@ -91,37 +85,10 @@ func (t *Transactor) Start(ctx context.Context) <-chan struct{} {
 	return doneChan
 }
 
-func (t *Transactor) mustGetTransactOpts(ctx context.Context, chainID *big.Int) *bind.TransactOpts {
-	auth, err := bind.NewKeyedTransactorWithChainID(t.privateKey, chainID)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get keyed transactor")
-	}
-	nonce, err := t.rawClient.PendingNonceAt(ctx, auth.From)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get pending nonce")
-	}
-	auth.Nonce = big.NewInt(int64(nonce))
-
-	// Returns priority fee per gas
-	gasTip, err := t.rawClient.SuggestGasTipCap(ctx)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get gas tip cap")
-	}
-
-	// Returns priority fee per gas + base fee per gas
-	gasPrice, err := t.rawClient.SuggestGasPrice(ctx)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get gas price")
-	}
-
-	auth.GasFeeCap = gasPrice
-	auth.GasTipCap = gasTip
-	auth.GasLimit = uint64(3000000)
-
-	return auth
-}
-
-func (t *Transactor) transferAlreadyFinalized(ctx context.Context, transferIdx *big.Int) bool {
+func (t *Transactor) transferAlreadyFinalized(
+	ctx context.Context,
+	transferIdx *big.Int,
+) bool {
 	opts := &bind.FilterOpts{
 		Start: 0,
 		End:   nil,
@@ -139,7 +106,11 @@ func (t *Transactor) transferAlreadyFinalized(ctx context.Context, transferIdx *
 	return false
 }
 
-func (t *Transactor) mustSendFinalizeTransfer(ctx context.Context, opts *bind.TransactOpts, event listener.TransferInitiatedEvent) {
+func (t *Transactor) mustSendFinalizeTransfer(
+	ctx context.Context,
+	opts *bind.TransactOpts,
+	event shared.TransferInitiatedEvent,
+) {
 	tx, err := t.gatewayTransactor.FinalizeTransfer(opts,
 		event.Recipient,
 		event.Amount,
