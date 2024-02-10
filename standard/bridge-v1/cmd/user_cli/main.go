@@ -275,7 +275,11 @@ func handlePendingTxes(
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to connect to eth client")
 	}
-	if !shared.PendingTransactionsExist(ctx, privateKey, ethClient) {
+	exist, err := shared.PendingTransactionsExist(ctx, privateKey, ethClient)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to check pending transactions")
+	}
+	if !exist {
 		return
 	}
 	if autoCancel {

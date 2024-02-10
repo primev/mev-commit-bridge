@@ -2,6 +2,7 @@ package relayer
 
 import (
 	"context"
+	"fmt"
 	"standard-bridge/pkg/shared"
 	"time"
 
@@ -32,11 +33,11 @@ func NewListener(
 }
 
 func (listener *Listener) Start(ctx context.Context) (
-	<-chan struct{}, <-chan shared.TransferInitiatedEvent,
+	<-chan struct{}, <-chan shared.TransferInitiatedEvent, error,
 ) {
 	chainID, err := listener.rawClient.ChainID(ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get chain id")
+		return nil, nil, fmt.Errorf("failed to get chain id: %w", err)
 	}
 	switch chainID.String() {
 	case "39999":
@@ -46,7 +47,7 @@ func (listener *Listener) Start(ctx context.Context) (
 		log.Info().Msg("Starting listener for mev-commit chain (settlement)")
 		listener.chain = shared.Settlement
 	default:
-		log.Fatal().Msgf("Unsupported chain id: %s", chainID.String())
+		return nil, nil, fmt.Errorf("unsupported chain id: %s", chainID.String())
 	}
 
 	listener.DoneChan = make(chan struct{})
@@ -63,15 +64,19 @@ func (listener *Listener) Start(ctx context.Context) (
 		blockNumHandled := uint64(0)
 
 		if listener.sync {
-			blockNumHandled = listener.mustGetBlockNum(ctx)
+			blockNumHandled, err = listener.obtainBlockNum(ctx)
+			if err != nil {
+				log.Fatal().Err(err).Msg("failed to obtain block number during sync")
+			}
 			// Fetch events up to the current block and handle them
 			opts := &bind.FilterOpts{Start: 0, End: &blockNumHandled, Context: ctx}
 			events, err := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
 			if err != nil {
-				log.Fatal().Err(err).Msg("error obtaining transfer initiated events")
+				log.Fatal().Err(err).Msg("listener failed to fetch transfer initiated events during sync")
 			}
+
 			for _, event := range events {
-				log.Info().Msgf("Transfer initiated event seen by listener: %+v", event)
+				log.Info().Msgf("Transfer initiated event seen by listener during sync: %+v", event)
 				listener.EventChan <- event
 			}
 		}
@@ -84,12 +89,24 @@ func (listener *Listener) Start(ctx context.Context) (
 			case <-ticker.C:
 			}
 
-			currentBlockNum := listener.mustGetBlockNum(ctx)
+			currentBlockNum, err := listener.obtainBlockNum(ctx)
+			if err != nil {
+				// TODO: Secondary url if rpc fails. For now just start over...
+				log.Error().Err(err).Msg("failed to obtain block number")
+				log.Warn().Msg("Listener restarting from block 0...")
+				blockNumHandled = 0
+				continue
+			}
 			if blockNumHandled < currentBlockNum {
 				opts := &bind.FilterOpts{Start: blockNumHandled + 1, End: &currentBlockNum, Context: ctx}
 				events, err := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
 				if err != nil {
-					log.Fatal().Err(err).Msg("error obtaining transfer initiated events")
+					// TODO: Secondary url if rpc fails. For now just start over...
+					log.Error().Err(err).Msgf("failed to fetch transfer initiated events from block %d to %d on %s",
+						blockNumHandled+1, currentBlockNum, listener.chain.String())
+					log.Warn().Msg("Listener restarting from block 0...")
+					blockNumHandled = 0
+					continue
 				}
 				log.Debug().Msgf("Fetched %d events from block %d to %d on %s",
 					len(events), blockNumHandled+1, currentBlockNum, listener.chain.String())
@@ -101,13 +118,13 @@ func (listener *Listener) Start(ctx context.Context) (
 			}
 		}
 	}()
-	return listener.DoneChan, listener.EventChan
+	return listener.DoneChan, listener.EventChan, nil
 }
 
-func (listener *Listener) mustGetBlockNum(ctx context.Context) uint64 {
+func (listener *Listener) obtainBlockNum(ctx context.Context) (uint64, error) {
 	blockNum, err := listener.rawClient.BlockNumber(ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get settlement block number")
+		return 0, fmt.Errorf("failed to obtain block number: %w", err)
 	}
-	return blockNum
+	return blockNum, nil
 }

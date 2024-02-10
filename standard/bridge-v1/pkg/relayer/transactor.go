@@ -3,6 +3,7 @@ package relayer
 import (
 	"context"
 	"crypto/ecdsa"
+	"fmt"
 	"math/big"
 	"standard-bridge/pkg/shared"
 	"time"
@@ -73,12 +74,25 @@ func (t *Transactor) Start(
 				t.chain, event.Chain.String(), event.Recipient, event.Amount, event.TransferIdx)
 			opts, err := shared.CreateTransactOpts(ctx, t.privateKey, t.chainID, t.rawClient)
 			if err != nil {
-				log.Fatal().Err(err).Msg("failed to get transact opts")
-			}
-			if t.transferAlreadyFinalized(ctx, event.TransferIdx) {
+				log.Err(err).Msg("failed to create transact opts for transfer finalization tx. Relayer likely requires restart.")
+				log.Warn().Msgf("skipping transfer finalization tx for src transfer idx: %d", event.TransferIdx)
 				continue
 			}
-			t.mustSendFinalizeTransfer(ctx, opts, event)
+			finalized, err := t.transferAlreadyFinalized(ctx, event.TransferIdx)
+			if err != nil {
+				log.Err(err).Msg("failed to check if transfer already finalized. Relayer likely requires restart.")
+				log.Warn().Msgf("skipping transfer finalization tx for src transfer idx: %d", event.TransferIdx)
+				continue
+			}
+			if finalized {
+				continue
+			}
+			err = t.sendFinalizeTransfer(ctx, opts, event)
+			if err != nil {
+				log.Err(err).Msg("failed to send transfer finalization tx. Relayer likely requires restart.")
+				log.Warn().Msgf("skipping transfer finalization tx for src transfer idx: %d", event.TransferIdx)
+				continue
+			}
 		}
 		log.Info().Msgf("Chan to transactor was closed, transactor for chain %s is exiting", t.chain)
 	}()
@@ -88,58 +102,58 @@ func (t *Transactor) Start(
 func (t *Transactor) transferAlreadyFinalized(
 	ctx context.Context,
 	transferIdx *big.Int,
-) bool {
+) (bool, error) {
 	opts := &bind.FilterOpts{
 		Start: 0,
 		End:   nil,
 	}
 	event, found, err := t.gatewayFilterer.ObtainTransferFinalizedEvent(opts, transferIdx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("error obtaining transfer finalized event")
+		return false, fmt.Errorf("failed to obtain transfer finalized event: %w", err)
 	}
 
 	if found {
-		log.Info().Msgf("Transfer already finalized on dest chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
+		log.Debug().Msgf("Transfer already finalized on dest chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
 			t.chain.String(), event.Recipient, event.Amount, event.CounterpartyIdx)
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
-func (t *Transactor) mustSendFinalizeTransfer(
+func (t *Transactor) sendFinalizeTransfer(
 	ctx context.Context,
 	opts *bind.TransactOpts,
 	event shared.TransferInitiatedEvent,
-) {
+) error {
 	tx, err := t.gatewayTransactor.FinalizeTransfer(opts,
 		event.Recipient,
 		event.Amount,
 		event.TransferIdx,
 	)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to send finalize transfer tx")
+		return fmt.Errorf("failed to send finalize transfer tx: %w", err)
 	}
 	log.Debug().Msgf("Transfer finalization tx sent, hash: %s, destChain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
 		tx.Hash().Hex(), t.chain.String(), event.Recipient, event.Amount, event.TransferIdx)
 
-	// Wait for the transaction to be included in a block, with a timeout
-	// TODO: Use 	"github.com/ethereum/go-ethereum/accounts/abi/bind" waitMined
-	// Also implement retries with 10% tip increase
+	// Wait for the transaction to be included in a block, with a timeout.
+	// TODO: Use "github.com/ethereum/go-ethereum/accounts/abi/bind" waitMined func.
+	// TODO: Tx retries with 10% tip increase.
 
 	idx := 0
 	timeoutCount := 50
 	for {
 		if idx >= timeoutCount {
-			log.Fatal().Msgf("Transfer finalization tx not included in block after %d attempts", timeoutCount)
+			return fmt.Errorf("timeout waiting for transfer finalization tx to be included in a block")
 		}
 		receipt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
+		if err != nil && err.Error() != "not found" {
+			return fmt.Errorf("failed to get receipt for transfer finalization tx: %w", err)
+		}
 		if receipt != nil {
 			log.Info().Msgf("Transfer finalization tx included in block %s, hash: %s, srcTransferIdx: %d",
 				receipt.BlockNumber, receipt.TxHash.Hex(), event.TransferIdx)
-			break
-		}
-		if err != nil && err.Error() != "not found" {
-			log.Fatal().Err(err).Msg("failed to get transaction receipt")
+			return nil
 		}
 		idx++
 		time.Sleep(5 * time.Second)

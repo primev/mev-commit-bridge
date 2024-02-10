@@ -49,17 +49,21 @@ func CreateTransactOpts(
 	return auth, nil
 }
 
-func CancelPendingTxes(ctx context.Context, privateKey *ecdsa.PrivateKey, rawClient *ethclient.Client) {
+func CancelPendingTxes(ctx context.Context, privateKey *ecdsa.PrivateKey, rawClient *ethclient.Client) error {
 	cancelAllPendingTransactions(ctx, privateKey, rawClient)
 	idx := 0
 	timeoutSec := 60
 	for {
 		if idx >= timeoutSec {
-			log.Fatal().Msg("Timeout reached while waiting for pending transactions to be cancelled")
+			return fmt.Errorf("timeout: failed to cancel all pending transactions")
 		}
-		if !PendingTransactionsExist(ctx, privateKey, rawClient) {
+		exist, err := PendingTransactionsExist(ctx, privateKey, rawClient)
+		if err != nil {
+			return fmt.Errorf("failed to check pending transactions: %w", err)
+		}
+		if !exist {
 			log.Info().Msg("All pending transactions for signing account have been cancelled")
-			break
+			return nil
 		}
 		time.Sleep(1 * time.Second)
 		idx++
@@ -70,35 +74,32 @@ func cancelAllPendingTransactions(
 	ctx context.Context,
 	privateKey *ecdsa.PrivateKey,
 	rawClient *ethclient.Client,
-) {
+) error {
 	chainID, err := rawClient.ChainID(ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to get chain ID")
+		return fmt.Errorf("failed to get chain id: %w", err)
 	}
 	fromAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	currentNonce, err := rawClient.PendingNonceAt(ctx, fromAddress)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to get current pending nonce")
-		return
+		return fmt.Errorf("failed to get current pending nonce: %w", err)
 	}
 	log.Debug().Msgf("Current pending nonce: %d", currentNonce)
 
-	latestNonce, err := rawClient.NonceAt(ctx, fromAddress, nil) // nil for the latest block
+	latestNonce, err := rawClient.NonceAt(ctx, fromAddress, nil)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to get latest nonce")
-		return
+		return fmt.Errorf("failed to get latest nonce: %w", err)
 	}
 	log.Debug().Msgf("Latest nonce: %d", latestNonce)
 
 	if currentNonce <= latestNonce {
 		log.Info().Msg("No pending transactions to cancel")
-		return
+		return nil
 	}
 
 	suggestedGasPrice, err := rawClient.SuggestGasPrice(ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to suggest gas price")
-		return
+		return fmt.Errorf("failed to get suggested gas price: %w", err)
 	}
 	log.Debug().Msgf("Suggested gas price: %s wei", suggestedGasPrice.String())
 
@@ -116,8 +117,7 @@ func cancelAllPendingTransactions(
 			tx := types.NewTransaction(nonce, fromAddress, big.NewInt(0), 21000, gasPrice, nil)
 			signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
 			if err != nil {
-				log.Fatal().Err(err).Msgf("Failed to sign transaction for nonce %d", nonce)
-				break
+				return fmt.Errorf("failed to sign cancellation transaction for nonce %d: %w", nonce, err)
 			}
 
 			err = rawClient.SendTransaction(ctx, signedTx)
@@ -130,28 +130,26 @@ func cancelAllPendingTransactions(
 					log.Warn().Err(err).Msgf("Retry %d: already known transaction for nonce %d", retry+1, nonce)
 					continue // Try again with a higher gas price
 				}
-				log.Fatal().Err(err).Msgf("Failed to send cancel transaction for nonce %d", nonce)
-				break
+				return fmt.Errorf("failed to send cancellation transaction for nonce %d: %w", nonce, err)
 			}
 			log.Info().Msgf("Sent cancel transaction for nonce %d with tx hash: %s, gas price: %s wei", nonce, signedTx.Hash().Hex(), gasPrice.String())
 			break
 		}
 	}
+	return nil
 }
 
-func PendingTransactionsExist(ctx context.Context, privateKey *ecdsa.PrivateKey, rawClient *ethclient.Client) bool {
+func PendingTransactionsExist(ctx context.Context, privateKey *ecdsa.PrivateKey, rawClient *ethclient.Client) (bool, error) {
 	fromAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	currentNonce, err := rawClient.PendingNonceAt(ctx, fromAddress)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to get current pending nonce")
-		return true
+		return false, fmt.Errorf("failed to get current pending nonce: %w", err)
 	}
 
-	latestNonce, err := rawClient.NonceAt(ctx, fromAddress, nil) // nil for the latest block
+	latestNonce, err := rawClient.NonceAt(ctx, fromAddress, nil)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to get latest nonce")
-		return true
+		return false, fmt.Errorf("failed to get latest nonce: %w", err)
 	}
 
-	return currentNonce > latestNonce
+	return currentNonce > latestNonce, nil
 }

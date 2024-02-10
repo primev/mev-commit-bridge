@@ -45,7 +45,10 @@ func NewTransferToSettlement(
 ) (*Transfer, error) {
 
 	t := &Transfer{}
-	commonSetup := t.getCommonSetup(privateKey, settlementRPCUrl, l1RPCUrl)
+	commonSetup, err := t.getCommonSetup(privateKey, settlementRPCUrl, l1RPCUrl)
+	if err != nil {
+		return nil, err
+	}
 
 	l1t, err := l1g.NewL1gatewayTransactor(l1ContractAddr, commonSetup.l1Client)
 	if err != nil {
@@ -83,7 +86,10 @@ func NewTransferToL1(
 	settlementContractAddr common.Address,
 ) (*Transfer, error) {
 	t := &Transfer{}
-	commonSetup := t.getCommonSetup(privateKey, settlementRPCUrl, l1RPCUrl)
+	commonSetup, err := t.getCommonSetup(privateKey, settlementRPCUrl, l1RPCUrl)
+	if err != nil {
+		return nil, err
+	}
 
 	st, err := sg.NewSettlementgatewayTransactor(settlementContractAddr, commonSetup.settlementClient)
 	if err != nil {
@@ -122,7 +128,7 @@ func (t *Transfer) getCommonSetup(
 	privateKey *ecdsa.PrivateKey,
 	settlementRPCUrl string,
 	l1RPCUrl string,
-) *commonSetup {
+) (*commonSetup, error) {
 
 	pubKey := &privateKey.PublicKey
 	pubKeyBytes := crypto.FromECDSAPub(pubKey)
@@ -134,21 +140,21 @@ func (t *Transfer) getCommonSetup(
 
 	l1Client, err := ethclient.Dial(l1RPCUrl)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to dial l1 rpc")
+		return nil, fmt.Errorf("failed to dial l1 rpc: %s", err)
 	}
 	l1ChainID, err := l1Client.ChainID(context.Background())
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get l1 chain id")
+		return nil, fmt.Errorf("failed to get l1 chain id: %s", err)
 	}
 	log.Debug().Msg("L1 chain id: " + l1ChainID.String())
 
 	settlementClient, err := ethclient.Dial(settlementRPCUrl)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to dial settlement rpc")
+		return nil, fmt.Errorf("failed to dial settlement rpc: %s", err)
 	}
 	settlementChainID, err := settlementClient.ChainID(context.Background())
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to dial settlement rpc")
+		return nil, fmt.Errorf("failed to get settlement chain id: %s", err)
 	}
 	log.Debug().Msg("Settlement chain id: " + settlementChainID.String())
 
@@ -157,7 +163,7 @@ func (t *Transfer) getCommonSetup(
 		l1ChainID:         l1ChainID,
 		settlementClient:  settlementClient,
 		settlementChainID: settlementChainID,
-	}
+	}, nil
 }
 
 func (t *Transfer) Start(ctx context.Context) error {
