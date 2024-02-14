@@ -43,6 +43,9 @@ func (listener *Listener) Start(ctx context.Context) (
 	case "39999":
 		log.Info().Msg("Starting listener for local_l1")
 		listener.chain = shared.L1
+	case "17000":
+		log.Info().Msg("Starting listener for Holesky L1")
+		listener.chain = shared.L1
 	case "17864":
 		log.Info().Msg("Starting listener for mev-commit chain (settlement)")
 		listener.chain = shared.Settlement
@@ -68,13 +71,12 @@ func (listener *Listener) Start(ctx context.Context) (
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to obtain block number during sync")
 			}
-			// Fetch events up to the current block and handle them
-			opts := &bind.FilterOpts{Start: 0, End: &blockNumHandled, Context: ctx}
-			events, err := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
+			// Most nodes limit query ranges so we fetch in 10k increments
+			events, err := listener.fetchTransferInitiatedEventsInRanges(
+				ctx, 0, blockNumHandled)
 			if err != nil {
-				log.Fatal().Err(err).Msg("listener failed to fetch transfer initiated events during sync")
+				log.Fatal().Err(err).Msg("failed to fetch transfer initiated events during sync")
 			}
-
 			for _, event := range events {
 				log.Info().Msgf("Transfer initiated event seen by listener during sync: %+v", event)
 				listener.EventChan <- event
@@ -127,4 +129,26 @@ func (listener *Listener) obtainBlockNum(ctx context.Context) (uint64, error) {
 		return 0, fmt.Errorf("failed to obtain block number: %w", err)
 	}
 	return blockNum, nil
+}
+
+func (listener *Listener) fetchTransferInitiatedEventsInRanges(
+	ctx context.Context,
+	startBlock,
+	endBlock uint64,
+) ([]shared.TransferInitiatedEvent, error) {
+	var totalEvents []shared.TransferInitiatedEvent
+	const maxBlockRange = 10000
+	for start := startBlock; start <= endBlock; start += maxBlockRange + 1 {
+		end := start + maxBlockRange
+		if end > endBlock {
+			end = endBlock
+		}
+		opts := &bind.FilterOpts{Start: start, End: &end, Context: ctx}
+		events, err := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to obtain transfer initiated events: %w", err)
+		}
+		totalEvents = append(totalEvents, events...)
+	}
+	return totalEvents, nil
 }

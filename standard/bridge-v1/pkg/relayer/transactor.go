@@ -54,6 +54,9 @@ func (t *Transactor) Start(
 	case "39999":
 		log.Info().Msg("Starting transactor for local_l1")
 		t.chain = shared.L1
+	case "17000":
+		log.Info().Msg("Starting transactor for Holesky L1")
+		t.chain = shared.L1
 	case "17864":
 		log.Info().Msg("Starting transactor for mev-commit chain (settlement)")
 		t.chain = shared.Settlement
