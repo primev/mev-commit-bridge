@@ -10,6 +10,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
 )
@@ -22,6 +23,16 @@ type Transactor struct {
 	chainID           *big.Int
 	chain             shared.Chain
 	eventChan         <-chan shared.TransferInitiatedEvent
+	mostRecentFinalized
+}
+
+type mostRecentFinalized struct {
+	event shared.TransferFinalizedEvent
+	opts  bind.FilterOpts
+}
+
+func (m mostRecentFinalized) String() string {
+	return "Event: " + m.event.String() + ". Opts start: " + fmt.Sprint(m.opts.Start) + ". Opts end: " + fmt.Sprint(*m.opts.End)
 }
 
 func NewTransactor(
@@ -38,6 +49,10 @@ func NewTransactor(
 		gatewayTransactor: gatewayTransactor,
 		gatewayFilterer:   gatewayFilterer,
 		eventChan:         eventChan,
+		mostRecentFinalized: mostRecentFinalized{
+			event: shared.TransferFinalizedEvent{},
+			opts:  bind.FilterOpts{Start: 0, End: nil},
+		},
 	}
 }
 
@@ -90,10 +105,23 @@ func (t *Transactor) Start(
 			if finalized {
 				continue
 			}
-			err = t.sendFinalizeTransfer(ctx, opts, event)
+			receipt, err := t.sendFinalizeTransfer(ctx, opts, event)
 			if err != nil {
 				log.Err(err).Msg("failed to send transfer finalization tx. Relayer likely requires restart.")
 				log.Warn().Msgf("skipping transfer finalization tx for src transfer idx: %d", event.TransferIdx)
+				continue
+			}
+			// Event should be obtainable to update cache
+			eventBlock := receipt.BlockNumber.Uint64()
+			filterOpts := &bind.FilterOpts{Start: eventBlock, End: &eventBlock, Context: ctx}
+			_, found, err := t.obtainTransferFinalizedAndUpdateCache(ctx, filterOpts, event.TransferIdx)
+			if err != nil {
+				log.Err(err).Msg("failed to obtain transfer finalized event after sending tx")
+				log.Warn().Msg("TransferFinalized cache will be incorrect. Relayer likely requires restart.")
+				continue
+			}
+			if !found {
+				log.Warn().Msg("transfer finalized event not found after sending tx")
 				continue
 			}
 		}
@@ -106,19 +134,35 @@ func (t *Transactor) transferAlreadyFinalized(
 	ctx context.Context,
 	transferIdx *big.Int,
 ) (bool, error) {
-	opts := &bind.FilterOpts{
-		Start: 0,
-		End:   nil,
-	}
-	event, found, err := t.gatewayFilterer.ObtainTransferFinalizedEvent(opts, transferIdx)
+	const maxBlockRange = 40000
+	var interEndBlock uint64 // Intermediate end block for each range
+
+	currentBlock, err := t.rawClient.BlockNumber(ctx)
 	if err != nil {
-		return false, fmt.Errorf("failed to obtain transfer finalized event: %w", err)
+		return false, fmt.Errorf("failed to get current block number: %w", err)
 	}
 
-	if found {
-		log.Debug().Msgf("Transfer already finalized on dest chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
-			t.chain.String(), event.Recipient, event.Amount, event.CounterpartyIdx)
-		return true, nil
+	startBlock := t.mostRecentFinalized.opts.Start
+
+	for start := startBlock; start <= currentBlock; start = interEndBlock + 1 {
+		interEndBlock = start + maxBlockRange
+		if interEndBlock > currentBlock {
+			interEndBlock = currentBlock
+		}
+		opts := &bind.FilterOpts{
+			Start:   start,
+			End:     &interEndBlock,
+			Context: ctx,
+		}
+		event, found, err := t.obtainTransferFinalizedAndUpdateCache(ctx, opts, transferIdx)
+		if err != nil {
+			return false, fmt.Errorf("failed to obtain transfer finalized event: %w", err)
+		}
+		if found {
+			log.Debug().Msgf("Transfer already finalized on dest chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
+				t.chain.String(), event.Recipient, event.Amount, event.CounterpartyIdx)
+			return true, nil
+		}
 	}
 	return false, nil
 }
@@ -127,14 +171,14 @@ func (t *Transactor) sendFinalizeTransfer(
 	ctx context.Context,
 	opts *bind.TransactOpts,
 	event shared.TransferInitiatedEvent,
-) error {
+) (*gethtypes.Receipt, error) {
 	tx, err := t.gatewayTransactor.FinalizeTransfer(opts,
 		event.Recipient,
 		event.Amount,
 		event.TransferIdx,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to send finalize transfer tx: %w", err)
+		return nil, fmt.Errorf("failed to send finalize transfer tx: %w", err)
 	}
 	log.Debug().Msgf("Transfer finalization tx sent, hash: %s, destChain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
 		tx.Hash().Hex(), t.chain.String(), event.Recipient, event.Amount, event.TransferIdx)
@@ -147,18 +191,34 @@ func (t *Transactor) sendFinalizeTransfer(
 	timeoutCount := 50
 	for {
 		if idx >= timeoutCount {
-			return fmt.Errorf("timeout waiting for transfer finalization tx to be included in a block")
+			return nil, fmt.Errorf("timeout waiting for transfer finalization tx to be included in a block")
 		}
 		receipt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
 		if err != nil && err.Error() != "not found" {
-			return fmt.Errorf("failed to get receipt for transfer finalization tx: %w", err)
+			return nil, fmt.Errorf("failed to get receipt for transfer finalization tx: %w", err)
 		}
 		if receipt != nil {
 			log.Info().Msgf("Transfer finalization tx included in block %s, hash: %s, srcTransferIdx: %d",
 				receipt.BlockNumber, receipt.TxHash.Hex(), event.TransferIdx)
-			return nil
+			return receipt, nil
 		}
 		idx++
 		time.Sleep(5 * time.Second)
 	}
+}
+
+func (t *Transactor) obtainTransferFinalizedAndUpdateCache(
+	ctx context.Context,
+	opts *bind.FilterOpts,
+	transferIdx *big.Int,
+) (shared.TransferFinalizedEvent, bool, error) {
+	event, found, err := t.gatewayFilterer.ObtainTransferFinalizedEvent(opts, transferIdx)
+	if err != nil {
+		return shared.TransferFinalizedEvent{}, false, fmt.Errorf("failed to obtain transfer finalized event: %w", err)
+	}
+	if found {
+		t.mostRecentFinalized = mostRecentFinalized{event, *opts}
+		log.Debug().Msgf("mostRecentFinalized cache updated: %+v", t.mostRecentFinalized)
+	}
+	return event, found, nil
 }

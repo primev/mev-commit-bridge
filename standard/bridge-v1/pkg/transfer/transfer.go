@@ -232,7 +232,7 @@ func (t *Transfer) Start(ctx context.Context) error {
 			return fmt.Errorf("timeout while waiting for transfer finalization tx from relayer")
 		}
 		opts := &bind.FilterOpts{
-			Start: 0,
+			Start: includedInBlock, // Start listening from block where InitiateTransfer tx was included
 			End:   nil,
 		}
 		event, found, err := t.destFilterer.ObtainTransferFinalizedEvent(opts, event.TransferIdx)
