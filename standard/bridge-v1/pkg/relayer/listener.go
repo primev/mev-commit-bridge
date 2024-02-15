@@ -71,7 +71,7 @@ func (listener *Listener) Start(ctx context.Context) (
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to obtain block number during sync")
 			}
-			// Most nodes limit query ranges so we fetch in 10k increments
+			// Most nodes limit query ranges so we fetch in 40k increments
 			events, err := listener.fetchTransferInitiatedEventsInRanges(
 				ctx, 0, blockNumHandled)
 			if err != nil {
@@ -137,7 +137,7 @@ func (listener *Listener) fetchTransferInitiatedEventsInRanges(
 	endBlock uint64,
 ) ([]shared.TransferInitiatedEvent, error) {
 	var totalEvents []shared.TransferInitiatedEvent
-	const maxBlockRange = 10000
+	const maxBlockRange = 40000
 	for start := startBlock; start <= endBlock; start += maxBlockRange + 1 {
 		end := start + maxBlockRange
 		if end > endBlock {

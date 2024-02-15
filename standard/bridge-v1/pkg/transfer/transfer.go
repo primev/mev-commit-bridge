@@ -30,6 +30,7 @@ type Transfer struct {
 	srcTransactor shared.GatewayTransactor
 	srcFilterer   shared.GatewayFilterer
 
+	destClient   *ethclient.Client
 	destFilterer shared.GatewayFilterer
 	destChainID  *big.Int
 }
@@ -71,6 +72,7 @@ func NewTransferToSettlement(
 		srcChainID:    commonSetup.l1ChainID,
 		srcTransactor: l1t,
 		srcFilterer:   l1f,
+		destClient:    commonSetup.settlementClient,
 		destFilterer:  sf,
 		destChainID:   commonSetup.settlementChainID,
 	}, nil
@@ -112,6 +114,7 @@ func NewTransferToL1(
 		srcChainID:    commonSetup.settlementChainID,
 		srcTransactor: st,
 		srcFilterer:   sf,
+		destClient:    commonSetup.l1Client,
 		destFilterer:  l1f,
 		destChainID:   commonSetup.l1ChainID,
 	}, nil
@@ -178,6 +181,12 @@ func (t *Transfer) Start(ctx context.Context) error {
 	// This method of calling InitiateTransfer silently failed when tx.value != amount.
 	opts.Value = t.amount
 
+	// Store block num on dest BEFORE initiating transfer
+	initialDestBlock, err := t.destClient.BlockNumber(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get dest block number before initiating transfer: %s", err)
+	}
+
 	tx, err := t.srcTransactor.InitiateTransfer(
 		opts,
 		t.destAddress,
@@ -232,7 +241,7 @@ func (t *Transfer) Start(ctx context.Context) error {
 			return fmt.Errorf("timeout while waiting for transfer finalization tx from relayer")
 		}
 		opts := &bind.FilterOpts{
-			Start: 0,
+			Start: initialDestBlock, // Query from dest block num BEFORE transfer started
 			End:   nil,
 		}
 		event, found, err := t.destFilterer.ObtainTransferFinalizedEvent(opts, event.TransferIdx)
