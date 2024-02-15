@@ -51,7 +51,7 @@ func NewTransactor(
 		eventChan:         eventChan,
 		mostRecentFinalized: mostRecentFinalized{
 			event: shared.TransferFinalizedEvent{},
-			opts:  bind.FilterOpts{Start: 0, End: nil},
+			opts:  bind.FilterOpts{Start: 0, End: nil}, // TODO: cache doesn't need to start at 0 once non-syncing relayer is implemented
 		},
 	}
 }
