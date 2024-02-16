@@ -57,22 +57,48 @@ func SuggestGasTipCapAndPrice(ctx context.Context, srcClient *ethclient.Client) 
 	return gasTip, gasPrice, nil
 }
 
+// TODO: Unit tests
 func BoostTipForTransactOpts(
 	ctx context.Context,
 	opts *bind.TransactOpts,
 	srcClient *ethclient.Client,
 ) error {
 	// Regenerate suggestions from current mempool state
-	gasTip, gasPrice, err := SuggestGasTipCapAndPrice(ctx, srcClient)
+	newGasTip, newGasPrice, err := SuggestGasTipCapAndPrice(ctx, srcClient)
 	if err != nil {
 		return fmt.Errorf("failed to suggest gas tip cap and price: %w", err)
 	}
-	// Boost tip suggestion by just above 10%
-	gasTip = gasTip.Add(gasTip, new(big.Int).Div(gasTip, big.NewInt(10)))
-	gasTip = gasTip.Add(gasTip, big.NewInt(1))
+	newBaseFee := new(big.Int).Sub(newGasPrice, newGasTip)
+	if newBaseFee.Cmp(big.NewInt(0)) == -1 {
+		return fmt.Errorf("new base fee cannot be negative: %s", newBaseFee.String())
+	}
 
-	opts.GasFeeCap = gasPrice
-	opts.GasTipCap = gasTip
+	baseFee := new(big.Int).Sub(opts.GasFeeCap, opts.GasTipCap)
+	if baseFee.Cmp(big.NewInt(0)) == -1 {
+		return fmt.Errorf("base fee cannot be negative: %s", baseFee.String())
+	}
+
+	var maxBaseFee *big.Int
+	if newBaseFee.Cmp(baseFee) == 1 {
+		maxBaseFee = newBaseFee
+	} else {
+		maxBaseFee = baseFee
+	}
+
+	var maxGasTip *big.Int
+	if newGasTip.Cmp(opts.GasTipCap) == 1 {
+		maxGasTip = newGasTip
+	} else {
+		maxGasTip = opts.GasTipCap
+	}
+
+	// Boost tip suggestion by just above 10% for max(new, old)
+	boostedTip := new(big.Int).Add(maxGasTip, new(big.Int).Div(maxGasTip, big.NewInt(10)))
+	boostedTip = boostedTip.Add(boostedTip, big.NewInt(1))
+
+	opts.GasTipCap = boostedTip
+	opts.GasFeeCap = new(big.Int).Add(maxBaseFee, boostedTip)
+
 	return nil
 }
 
