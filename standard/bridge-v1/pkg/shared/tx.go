@@ -110,6 +110,7 @@ type TxSubmitFunc func(
 	err error,
 )
 
+// TODO: Unit tests
 func WaitMinedWithRetry(
 	ctx context.Context,
 	rawClient *ethclient.Client,
