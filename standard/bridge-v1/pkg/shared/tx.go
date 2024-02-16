@@ -32,21 +32,140 @@ func CreateTransactOpts(
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 
-	// Returns priority fee per gas
-	gasTip, err := srcClient.SuggestGasTipCap(ctx)
+	gasTip, gasPrice, err := SuggestGasTipCapAndPrice(ctx, srcClient)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get gas tip cap: %w", err)
-	}
-	// Returns priority fee per gas + base fee per gas
-	gasPrice, err := srcClient.SuggestGasPrice(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get gas price: %w", err)
+		return nil, fmt.Errorf("failed to suggest gas tip cap and price: %w", err)
 	}
 
 	auth.GasFeeCap = gasPrice
 	auth.GasTipCap = gasTip
 	auth.GasLimit = uint64(3000000)
 	return auth, nil
+}
+
+func SuggestGasTipCapAndPrice(ctx context.Context, srcClient *ethclient.Client) (*big.Int, *big.Int, error) {
+	// Returns priority fee per gas
+	gasTip, err := srcClient.SuggestGasTipCap(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get gas tip cap: %w", err)
+	}
+	// Returns priority fee per gas + base fee per gas
+	gasPrice, err := srcClient.SuggestGasPrice(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get gas price: %w", err)
+	}
+	return gasTip, gasPrice, nil
+}
+
+// TODO: Unit tests
+func BoostTipForTransactOpts(
+	ctx context.Context,
+	opts *bind.TransactOpts,
+	srcClient *ethclient.Client,
+) error {
+	// Regenerate suggestions from current mempool state
+	newGasTip, newGasPrice, err := SuggestGasTipCapAndPrice(ctx, srcClient)
+	if err != nil {
+		return fmt.Errorf("failed to suggest gas tip cap and price: %w", err)
+	}
+	newBaseFee := new(big.Int).Sub(newGasPrice, newGasTip)
+	if newBaseFee.Cmp(big.NewInt(0)) == -1 {
+		return fmt.Errorf("new base fee cannot be negative: %s", newBaseFee.String())
+	}
+
+	baseFee := new(big.Int).Sub(opts.GasFeeCap, opts.GasTipCap)
+	if baseFee.Cmp(big.NewInt(0)) == -1 {
+		return fmt.Errorf("base fee cannot be negative: %s", baseFee.String())
+	}
+
+	var maxBaseFee *big.Int
+	if newBaseFee.Cmp(baseFee) == 1 {
+		maxBaseFee = newBaseFee
+	} else {
+		maxBaseFee = baseFee
+	}
+
+	var maxGasTip *big.Int
+	if newGasTip.Cmp(opts.GasTipCap) == 1 {
+		maxGasTip = newGasTip
+	} else {
+		maxGasTip = opts.GasTipCap
+	}
+
+	// Boost tip suggestion by just above 10% for max(new, old)
+	boostedTip := new(big.Int).Add(maxGasTip, new(big.Int).Div(maxGasTip, big.NewInt(10)))
+	boostedTip = boostedTip.Add(boostedTip, big.NewInt(1))
+
+	opts.GasTipCap = boostedTip
+	opts.GasFeeCap = new(big.Int).Add(maxBaseFee, boostedTip)
+
+	log.Debug().Msgf("Boosted gas tip to %s wei and gas price to %s wei", boostedTip.String(), opts.GasFeeCap.String())
+
+	return nil
+}
+
+type TxSubmitFunc func(
+	ctx context.Context,
+	opts *bind.TransactOpts,
+) (
+	tx *types.Transaction,
+	err error,
+)
+
+// TODO: Unit tests
+func WaitMinedWithRetry(
+	ctx context.Context,
+	rawClient *ethclient.Client,
+	opts *bind.TransactOpts,
+	submitTx TxSubmitFunc,
+) (*types.Receipt, error) {
+
+	const maxRetries = 3
+	var err error
+	var tx *types.Transaction
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			log.Info().Msgf("Transaction not included within 60 seconds, boosting gas tip by 10%% for attempt %d", attempt)
+			if err := BoostTipForTransactOpts(ctx, opts, rawClient); err != nil {
+				return nil, fmt.Errorf("failed to boost gas tip for attempt %d: %w", attempt, err)
+			}
+		}
+
+		tx, err = submitTx(ctx, opts)
+		if err != nil {
+			return nil, fmt.Errorf("tx submission failed on attempt %d: %w", attempt, err)
+		}
+
+		timeoutCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		receiptChan := make(chan *types.Receipt)
+		errChan := make(chan error)
+
+		go func() {
+			receipt, err := bind.WaitMined(timeoutCtx, rawClient, tx)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			receiptChan <- receipt
+		}()
+
+		select {
+		case receipt := <-receiptChan:
+			cancel()
+			return receipt, nil
+		case err := <-errChan:
+			cancel()
+			return nil, err
+		case <-timeoutCtx.Done():
+			cancel()
+			if attempt == maxRetries-1 {
+				return nil, fmt.Errorf("tx not included after %d attempts", maxRetries)
+			}
+			// Continue with boosted tip
+		}
+	}
+	return nil, fmt.Errorf("unexpected error: control flow should not reach end of WaitMinedWithRetry")
 }
 
 func CancelPendingTxes(ctx context.Context, privateKey *ecdsa.PrivateKey, rawClient *ethclient.Client) error {
@@ -70,6 +189,7 @@ func CancelPendingTxes(ctx context.Context, privateKey *ecdsa.PrivateKey, rawCli
 	}
 }
 
+// TODO: Use WaitMinedWithRetry
 func cancelAllPendingTransactions(
 	ctx context.Context,
 	privateKey *ecdsa.PrivateKey,
