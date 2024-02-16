@@ -99,6 +99,8 @@ func BoostTipForTransactOpts(
 	opts.GasTipCap = boostedTip
 	opts.GasFeeCap = new(big.Int).Add(maxBaseFee, boostedTip)
 
+	log.Debug().Msgf("Boosted gas tip to %s wei and gas price to %s wei", boostedTip.String(), opts.GasFeeCap.String())
+
 	return nil
 }
 
