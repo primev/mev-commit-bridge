@@ -74,11 +74,13 @@ The relayer listens to, and processes events residing from the contract on L1. E
 
 Note to bridge from the mev-commit chain back to L1, the same protocol is used. Except mev-commit chain ether is burned upon initiating a bridge operation, and ether is unlocked on L1 upon bridge completion. Therefore the relayer should be concurrently monitoring both chains for events.
 
-## V2 Notes
+## V2 Design
 
-V2 of the standard bridge should incorporate merkle attestations of cross chain messages, and could possibly focus on a more decentralized bridging architecture. From some initial research, it seems like multiple bridging projects rely on merkle proof data being relayed across chains. The main difference seems to be what validator set is responsible for attesting to or managing the canonical merkle root to verify against.
+V2 of the standard bridge should incorporate merkle attestations of cross chain messages, and introduce more decentralized relaying architecture. 
 
-V2 could also focus on having multiple validators.
+### Merkle Attestations
+
+From some initial research, it seems like multiple bridging projects rely on merkle proof data being relayed across chains. The main difference seems to be what validator set is responsible for attesting to or managing the canonical merkle root to verify against.
 
 Inspiration:
 
@@ -88,3 +90,7 @@ Inspiration:
 * For our implementation we may want to use [eth-getproof](https://docs.alchemy.com/reference/eth-getproof).
 
 One possible implementation is the full data from each `TransferInitiated` event is committed to an on-chain merkle tree (separate from the full ethereum state tree). Upon each `TransferInitiated` event an off-chain validator set attests to the merkle root of said sub-tree. The proof data is relayed by the relayer, and verified on the destination. It's worth exploring how this scheme compares to using eth-getproof and the full merkle tree.  
+
+### Improving decentralization
+
+V2 improvements will include decentralization of the relayer role. A simple scheme could adapt [contracts](https://github.com/primevprotocol/contracts/tree/main/contracts/standard-bridge) to require `n` out of `m` relayers each with separate EOAs, to listen for `TransferInitiated` events and/or associated metadata. Then submit `FinalizeTransfer` txes on the destination chain. 
