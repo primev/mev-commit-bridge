@@ -72,7 +72,7 @@ func (listener *Listener) Start(ctx context.Context) (
 				log.Fatal().Err(err).Msg("failed to obtain block number during sync")
 			}
 			// Most nodes limit query ranges so we fetch in 40k increments
-			events, err := listener.fetchTransferInitiatedEventsInRanges(
+			events, err := listener.obtainTransferInitiatedEventsInBatches(
 				ctx, 0, blockNumHandled)
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to fetch transfer initiated events during sync")
@@ -100,11 +100,10 @@ func (listener *Listener) Start(ctx context.Context) (
 				continue
 			}
 			if blockNumHandled < currentBlockNum {
-				opts := &bind.FilterOpts{Start: blockNumHandled + 1, End: &currentBlockNum, Context: ctx}
-				events, err := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
+				events, err := listener.obtainTransferInitiatedEventsInBatches(ctx, blockNumHandled+1, currentBlockNum)
 				if err != nil {
 					// TODO: Secondary url if rpc fails. For now just start over...
-					log.Error().Err(err).Msgf("failed to fetch transfer initiated events from block %d to %d on %s",
+					log.Error().Err(err).Msgf("failed to query transfer initiated events from block %d to %d on %s",
 						blockNumHandled+1, currentBlockNum, listener.chain.String())
 					log.Warn().Msg("Listener restarting from block 0...")
 					blockNumHandled = 0
@@ -131,7 +130,7 @@ func (listener *Listener) obtainBlockNum(ctx context.Context) (uint64, error) {
 	return blockNum, nil
 }
 
-func (listener *Listener) fetchTransferInitiatedEventsInRanges(
+func (listener *Listener) obtainTransferInitiatedEventsInBatches(
 	ctx context.Context,
 	startBlock,
 	endBlock uint64,
