@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"standard-bridge/pkg/shared"
-	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -172,39 +171,26 @@ func (t *Transactor) sendFinalizeTransfer(
 	opts *bind.TransactOpts,
 	event shared.TransferInitiatedEvent,
 ) (*gethtypes.Receipt, error) {
-	tx, err := t.gatewayTransactor.FinalizeTransfer(opts,
-		event.Recipient,
-		event.Amount,
-		event.TransferIdx,
-	)
+
+	// Capture event params in closure and define tx submission callback
+	submitFinalizeTransfer := func(
+		ctx context.Context,
+		opts *bind.TransactOpts,
+	) (*gethtypes.Transaction, error) {
+		tx, err := t.gatewayTransactor.FinalizeTransfer(opts, event.Recipient, event.Amount, event.TransferIdx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send finalize transfer tx: %w", err)
+		}
+		log.Debug().Msgf("Transfer finalization tx sent, hash: %s, destChain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
+			tx.Hash().Hex(), t.chain.String(), event.Recipient, event.Amount, event.TransferIdx)
+		return tx, nil
+	}
+
+	receipt, err := shared.WaitMinedWithRetry(ctx, t.rawClient, opts, submitFinalizeTransfer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send finalize transfer tx: %w", err)
+		return nil, fmt.Errorf("failed to wait for finalize transfer tx to be mined: %w", err)
 	}
-	log.Debug().Msgf("Transfer finalization tx sent, hash: %s, destChain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
-		tx.Hash().Hex(), t.chain.String(), event.Recipient, event.Amount, event.TransferIdx)
-
-	// Wait for the transaction to be included in a block, with a timeout.
-	// TODO: Use "github.com/ethereum/go-ethereum/accounts/abi/bind" waitMined func.
-	// TODO: Tx retries with 10% tip increase.
-
-	idx := 0
-	timeoutCount := 50
-	for {
-		if idx >= timeoutCount {
-			return nil, fmt.Errorf("timeout waiting for transfer finalization tx to be included in a block")
-		}
-		receipt, err := t.rawClient.TransactionReceipt(ctx, tx.Hash())
-		if err != nil && err.Error() != "not found" {
-			return nil, fmt.Errorf("failed to get receipt for transfer finalization tx: %w", err)
-		}
-		if receipt != nil {
-			log.Info().Msgf("Transfer finalization tx included in block %s, hash: %s, srcTransferIdx: %d",
-				receipt.BlockNumber, receipt.TxHash.Hex(), event.TransferIdx)
-			return receipt, nil
-		}
-		idx++
-		time.Sleep(5 * time.Second)
-	}
+	return receipt, nil
 }
 
 func (t *Transactor) obtainTransferFinalizedAndUpdateCache(

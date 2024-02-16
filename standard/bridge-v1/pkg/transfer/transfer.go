@@ -9,6 +9,7 @@ import (
 	shared "standard-bridge/pkg/shared"
 	"time"
 
+	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	l1g "github.com/primevprotocol/contracts-abi/clients/L1Gateway"
 	sg "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
 
@@ -187,38 +188,27 @@ func (t *Transfer) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to get dest block number before initiating transfer: %s", err)
 	}
 
-	tx, err := t.srcTransactor.InitiateTransfer(
-		opts,
-		t.destAddress,
-		t.amount,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to initiate transfer: %s", err)
+	submitInitiateTransfer := func(
+		ctx context.Context,
+		opts *bind.TransactOpts,
+	) (*gethtypes.Transaction, error) {
+		tx, err := t.srcTransactor.InitiateTransfer(
+			opts,
+			t.destAddress,
+			t.amount,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initiate transfer: %s", err)
+		}
+		log.Debug().Msgf("Transfer initialization tx sent, hash: %s, srcChain: %s, recipient: %s, amount: %d",
+			tx.Hash().Hex(), t.srcChainID.String(), t.destAddress.Hex(), t.amount)
+		return tx, nil
 	}
-	log.Debug().Msgf("Transfer initialization tx sent, hash: %s, srcChain: %s, recipient: %s, amount: %d",
-		tx.Hash().Hex(), t.srcChainID.String(), t.destAddress.Hex(), t.amount)
 
-	// Wait for initiation transaction to be included in a block, or timeout
-	idx := 0
-	timeoutCount := 50
-	includedInBlock := uint64(math.MaxUint64)
-	for {
-		if idx >= timeoutCount {
-			return fmt.Errorf("timeout while waiting for transfer initiation tx to be included in a block")
-		}
-		receipt, err := t.srcClient.TransactionReceipt(ctx, tx.Hash())
-		if receipt != nil {
-			log.Info().Msgf("Transfer initialization tx included in block %s, hash: %s",
-				receipt.BlockNumber, receipt.TxHash.Hex())
-			includedInBlock = receipt.BlockNumber.Uint64()
-			break
-		}
-		if err != nil && err.Error() != "not found" {
-			return fmt.Errorf("error getting receipt for transfer initiation tx: %s", err)
-		}
-		idx++
-		time.Sleep(5 * time.Second)
-	}
+	receipt, err := shared.WaitMinedWithRetry(
+		ctx, t.srcClient, opts, submitInitiateTransfer)
+
+	includedInBlock := receipt.BlockNumber.Uint64()
 
 	// Obtain event on src chain, transfer idx needed for dest chain
 	if includedInBlock == math.MaxUint64 {
@@ -235,9 +225,10 @@ func (t *Transfer) Start(ctx context.Context) error {
 		t.srcChainID.String(), event.Recipient, event.Amount, event.TransferIdx)
 
 	log.Debug().Msgf("Waiting for transfer finalization tx from relayer")
-	idx = 0
+	timeoutSec := 5 * 60
+	countSec := 0
 	for {
-		if idx >= timeoutCount {
+		if countSec >= timeoutSec {
 			return fmt.Errorf("timeout while waiting for transfer finalization tx from relayer")
 		}
 		opts := &bind.FilterOpts{
@@ -253,8 +244,8 @@ func (t *Transfer) Start(ctx context.Context) error {
 				t.destChainID.String(), event.Recipient, event.Amount, event.CounterpartyIdx)
 			break
 		}
-		idx++
-		time.Sleep(5 * time.Second)
+		time.Sleep(time.Second)
+		countSec++
 	}
 	return nil
 }
