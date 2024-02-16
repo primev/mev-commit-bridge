@@ -190,8 +190,8 @@ func (t *Transactor) sendFinalizeTransfer(
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for finalize transfer tx to be mined: %w", err)
 	}
-	log.Info().Msgf("FinalizeTransfer tx included on dest chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
-		t.chain.String(), event.Recipient, event.Amount, event.TransferIdx)
+	includedInBlock := receipt.BlockNumber.Uint64()
+	log.Info().Msgf("FinalizeTransfer tx included in block: %d", includedInBlock)
 
 	return receipt, nil
 }

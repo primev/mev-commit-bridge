@@ -207,13 +207,17 @@ func (t *Transfer) Start(ctx context.Context) error {
 
 	receipt, err := shared.WaitMinedWithRetry(
 		ctx, t.srcClient, opts, submitInitiateTransfer)
+	if err != nil {
+		return fmt.Errorf("failed to wait for initiate transfer tx to be mined: %s", err)
+	}
 
 	includedInBlock := receipt.BlockNumber.Uint64()
-
-	// Obtain event on src chain, transfer idx needed for dest chain
 	if includedInBlock == math.MaxUint64 {
 		return fmt.Errorf("transfer initiation tx not included in block")
 	}
+	log.Info().Msgf("InitiateTransfer tx included in block: %d", includedInBlock)
+
+	// Obtain event on src chain, transfer idx needed for dest chain
 	event, err := t.srcFilterer.ObtainTransferInitiatedBySender(&bind.FilterOpts{
 		Start: includedInBlock,
 		End:   &includedInBlock,
