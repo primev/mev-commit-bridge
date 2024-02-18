@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -68,21 +69,10 @@ func BoostTipForTransactOpts(
 	if err != nil {
 		return fmt.Errorf("failed to suggest gas tip cap and price: %w", err)
 	}
+
 	newBaseFee := new(big.Int).Sub(newGasPrice, newGasTip)
 	if newBaseFee.Cmp(big.NewInt(0)) == -1 {
 		return fmt.Errorf("new base fee cannot be negative: %s", newBaseFee.String())
-	}
-
-	baseFee := new(big.Int).Sub(opts.GasFeeCap, opts.GasTipCap)
-	if baseFee.Cmp(big.NewInt(0)) == -1 {
-		return fmt.Errorf("base fee cannot be negative: %s", baseFee.String())
-	}
-
-	var maxBaseFee *big.Int
-	if newBaseFee.Cmp(baseFee) == 1 {
-		maxBaseFee = newBaseFee
-	} else {
-		maxBaseFee = baseFee
 	}
 
 	var maxGasTip *big.Int
@@ -96,10 +86,18 @@ func BoostTipForTransactOpts(
 	boostedTip := new(big.Int).Add(maxGasTip, new(big.Int).Div(maxGasTip, big.NewInt(10)))
 	boostedTip = boostedTip.Add(boostedTip, big.NewInt(1))
 
-	opts.GasTipCap = boostedTip
-	opts.GasFeeCap = new(big.Int).Add(maxBaseFee, boostedTip)
+	baseFee := new(big.Int).Sub(opts.GasFeeCap, opts.GasTipCap)
+	if baseFee.Cmp(big.NewInt(0)) == -1 {
+		return fmt.Errorf("base fee cannot be negative: %s", baseFee.String())
+	}
 
-	log.Debug().Msgf("Boosted gas tip to %s wei and gas price to %s wei", boostedTip.String(), opts.GasFeeCap.String())
+	log.Debug().Msgf("Gas params for tx that was not included: Gas tip: %s wei, gas fee cap: %s wei, base fee: %s wei", opts.GasTipCap.String(), opts.GasFeeCap.String(), baseFee.String())
+	log.Debug().Msg("Tip will be boosted by 10%, base fee will be new suggestion")
+
+	opts.GasTipCap = boostedTip
+	opts.GasFeeCap = new(big.Int).Add(newBaseFee, boostedTip)
+
+	log.Debug().Msgf("Boosted gas tip to %s wei and gas fee cap to %s wei. New base fee: %s wei", opts.GasTipCap.String(), opts.GasFeeCap.String(), newBaseFee.String())
 
 	return nil
 }
@@ -120,7 +118,7 @@ func WaitMinedWithRetry(
 	submitTx TxSubmitFunc,
 ) (*types.Receipt, error) {
 
-	const maxRetries = 3
+	const maxRetries = 5
 	var err error
 	var tx *types.Transaction
 
@@ -134,6 +132,10 @@ func WaitMinedWithRetry(
 
 		tx, err = submitTx(ctx, opts)
 		if err != nil {
+			if strings.Contains(err.Error(), "replacement transaction underpriced") || strings.Contains(err.Error(), "already known") {
+				log.Warn().Err(err).Msgf("Tx submission failed on attempt %d: %s", attempt, err)
+				continue
+			}
 			return nil, fmt.Errorf("tx submission failed on attempt %d: %w", attempt, err)
 		}
 
