@@ -4,6 +4,10 @@ export CGO_ENABLED=0
 relayer: bin
 	go build -o bin/relayer ./cmd/relayer
 
+linux-amd64-relayer:
+	GOOS=linux GOARCH=amd64 go build -o mev-commit-bridge-relayer-linux-amd64 ./cmd/relayer
+	tar -czvf mev-commit-bridge-relayer-linux-amd64.tar.gz mev-commit-bridge-relayer-linux-amd64
+
 user-cli: bin
 	go build -o bin/user_cli ./cmd/user_cli
 
