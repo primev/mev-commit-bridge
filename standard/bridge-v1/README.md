@@ -76,7 +76,10 @@ Note to bridge from the mev-commit chain back to L1, the same protocol is used. 
 
 ## V2 Design
 
-V2 of the standard bridge should incorporate merkle attestations of cross chain messages, and introduce more decentralized relaying architecture. 
+V2 of the standard bridge could include the following improvements:
+- Incorporate merkle attestations of cross chain messages into the transfer protocol
+- Multiple relayers attesting to transfers (multisig)
+- Utilize side chain state commitments posted to L1 (requires work elsewhere)
 
 ### Merkle Attestations
 
@@ -91,6 +94,11 @@ Inspiration:
 
 One possible implementation is the full data from each `TransferInitiated` event is committed to an on-chain merkle tree (separate from the full ethereum state tree). Upon each `TransferInitiated` event an off-chain validator set attests to the merkle root of said sub-tree. The proof data is relayed by the relayer, and verified on the destination. It's worth exploring how this scheme compares to using eth-getproof and the full merkle tree.  
 
-### Improving decentralization
+### Multiple Relayers
 
 V2 improvements will include decentralization of the relayer role. A simple scheme could adapt [contracts](https://github.com/primevprotocol/contracts/tree/main/contracts/standard-bridge) to require `n` out of `m` relayers each with separate EOAs, to listen for `TransferInitiated` events and/or associated metadata. Then submit `FinalizeTransfer` txes on the destination chain. 
+
+
+###  Side Chain State Commitments
+
+The mev-commit chain may adopt a state commitment scheme where merkle roots of sidechain state are periodically posted to L1 blobs, post EIP 4844. In such a scenario the bridging protocol could be adapted to utilize these commitments.
