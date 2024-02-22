@@ -128,7 +128,7 @@ func WaitMinedWithRetry(
 	submitTx TxSubmitFunc,
 ) (*types.Receipt, error) {
 
-	const maxRetries = 5
+	const maxRetries = 10
 	var err error
 	var tx *types.Transaction
 
