@@ -67,7 +67,7 @@ func (listener *Listener) Start(ctx context.Context) (
 		blockNumHandled := uint64(0)
 
 		if listener.sync {
-			blockNumHandled, err = listener.obtainBlockNum(ctx)
+			blockNumHandled, err = listener.obtainFinalizedBlockNum(ctx)
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to obtain block number during sync")
 			}
@@ -91,7 +91,7 @@ func (listener *Listener) Start(ctx context.Context) (
 			case <-ticker.C:
 			}
 
-			currentBlockNum, err := listener.obtainBlockNum(ctx)
+			currentBlockNum, err := listener.obtainFinalizedBlockNum(ctx)
 			if err != nil {
 				// TODO: Secondary url if rpc fails. For now just start over...
 				log.Error().Err(err).Msg("failed to obtain block number")
@@ -122,12 +122,17 @@ func (listener *Listener) Start(ctx context.Context) (
 	return listener.DoneChan, listener.EventChan, nil
 }
 
-func (listener *Listener) obtainBlockNum(ctx context.Context) (uint64, error) {
+func (listener *Listener) obtainFinalizedBlockNum(ctx context.Context) (uint64, error) {
 	blockNum, err := listener.rawClient.BlockNumber(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to obtain block number: %w", err)
 	}
-	return blockNum, nil
+	// Blocks 2 epochs old are considered finalized
+	epochBlocks := uint64(32)
+	if blockNum < 2*epochBlocks {
+		return 0, nil
+	}
+	return blockNum - 2*epochBlocks, nil
 }
 
 func (listener *Listener) obtainTransferInitiatedEventsInBatches(

@@ -229,7 +229,7 @@ func (t *Transfer) Start(ctx context.Context) error {
 		t.srcChainID.String(), event.Recipient, event.Amount, event.TransferIdx)
 
 	log.Debug().Msgf("Waiting for transfer finalization tx from relayer")
-	timeoutSec := 5 * 60
+	timeoutSec := 60 * 30 // 30 minutes
 	countSec := 0
 	for {
 		if countSec >= timeoutSec {
