@@ -64,15 +64,29 @@ func BoostTipForTransactOpts(
 	opts *bind.TransactOpts,
 	srcClient *ethclient.Client,
 ) error {
-	// Regenerate suggestions from current mempool state
-	newGasTip, newGasPrice, err := SuggestGasTipCapAndPrice(ctx, srcClient)
+	log.Debug().Msgf("Gas params for tx that was not included: Gas tip: %s wei, gas fee cap: %s wei,",
+		opts.GasTipCap.String(), opts.GasFeeCap.String())
+
+	newGasTip, newFeeCap, err := SuggestGasTipCapAndPrice(ctx, srcClient)
 	if err != nil {
 		return fmt.Errorf("failed to suggest gas tip cap and price: %w", err)
 	}
 
-	newBaseFee := new(big.Int).Sub(newGasPrice, newGasTip)
+	newBaseFee := new(big.Int).Sub(newFeeCap, newGasTip)
 	if newBaseFee.Cmp(big.NewInt(0)) == -1 {
 		return fmt.Errorf("new base fee cannot be negative: %s", newBaseFee.String())
+	}
+
+	prevBaseFee := new(big.Int).Sub(opts.GasFeeCap, opts.GasTipCap)
+	if prevBaseFee.Cmp(big.NewInt(0)) == -1 {
+		return fmt.Errorf("base fee cannot be negative: %s", prevBaseFee.String())
+	}
+
+	var maxBaseFee *big.Int
+	if newBaseFee.Cmp(prevBaseFee) == 1 {
+		maxBaseFee = newBaseFee
+	} else {
+		maxBaseFee = prevBaseFee
 	}
 
 	var maxGasTip *big.Int
@@ -86,18 +100,12 @@ func BoostTipForTransactOpts(
 	boostedTip := new(big.Int).Add(maxGasTip, new(big.Int).Div(maxGasTip, big.NewInt(10)))
 	boostedTip = boostedTip.Add(boostedTip, big.NewInt(1))
 
-	baseFee := new(big.Int).Sub(opts.GasFeeCap, opts.GasTipCap)
-	if baseFee.Cmp(big.NewInt(0)) == -1 {
-		return fmt.Errorf("base fee cannot be negative: %s", baseFee.String())
-	}
-
-	log.Debug().Msgf("Gas params for tx that was not included: Gas tip: %s wei, gas fee cap: %s wei, base fee: %s wei", opts.GasTipCap.String(), opts.GasFeeCap.String(), baseFee.String())
-	log.Debug().Msg("Tip will be boosted by 10%, base fee will be new suggestion")
-
 	opts.GasTipCap = boostedTip
-	opts.GasFeeCap = new(big.Int).Add(newBaseFee, boostedTip)
+	opts.GasFeeCap = new(big.Int).Add(maxBaseFee, boostedTip)
 
-	log.Debug().Msgf("Boosted gas tip to %s wei and gas fee cap to %s wei. New base fee: %s wei", opts.GasTipCap.String(), opts.GasFeeCap.String(), newBaseFee.String())
+	log.Debug().Msg("Tip will be boosted by 10%, base fee will be max(new, old)")
+	log.Debug().Msgf("Boosted gas tip to %s wei and gas fee cap to %s wei",
+		opts.GasTipCap.String(), opts.GasFeeCap.String())
 
 	return nil
 }
