@@ -64,8 +64,8 @@ func BoostTipForTransactOpts(
 	opts *bind.TransactOpts,
 	srcClient *ethclient.Client,
 ) error {
-	log.Debug().Msgf("Gas params for tx that was not included: Gas tip: %s wei, gas fee cap: %s wei,",
-		opts.GasTipCap.String(), opts.GasFeeCap.String())
+	log.Debug().Msgf("Gas params for tx that was not included: Gas tip: %s wei, gas fee cap: %s wei, base fee: %s wei",
+		opts.GasTipCap.String(), opts.GasFeeCap.String(), new(big.Int).Sub(opts.GasFeeCap, opts.GasTipCap).String())
 
 	newGasTip, newFeeCap, err := SuggestGasTipCapAndPrice(ctx, srcClient)
 	if err != nil {
@@ -96,16 +96,18 @@ func BoostTipForTransactOpts(
 		maxGasTip = opts.GasTipCap
 	}
 
-	// Boost tip suggestion by just above 10% for max(new, old)
 	boostedTip := new(big.Int).Add(maxGasTip, new(big.Int).Div(maxGasTip, big.NewInt(10)))
 	boostedTip = boostedTip.Add(boostedTip, big.NewInt(1))
 
-	opts.GasTipCap = boostedTip
-	opts.GasFeeCap = new(big.Int).Add(maxBaseFee, boostedTip)
+	boostedBaseFee := new(big.Int).Add(maxBaseFee, new(big.Int).Div(maxBaseFee, big.NewInt(10)))
+	boostedBaseFee = boostedBaseFee.Add(boostedBaseFee, big.NewInt(1))
 
-	log.Debug().Msg("Tip will be boosted by 10%, base fee will be max(new, old)")
-	log.Debug().Msgf("Boosted gas tip to %s wei and gas fee cap to %s wei",
-		opts.GasTipCap.String(), opts.GasFeeCap.String())
+	opts.GasTipCap = boostedTip
+	opts.GasFeeCap = new(big.Int).Add(boostedBaseFee, boostedTip)
+
+	log.Debug().Msg("Tip and bases fee will be boosted by 10%")
+	log.Debug().Msgf("Boosted gas tip cap to %s wei and gas fee cap to %s wei. Base fee: %s wei",
+		opts.GasTipCap.String(), opts.GasFeeCap.String(), boostedBaseFee.String())
 
 	return nil
 }
