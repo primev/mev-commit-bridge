@@ -280,6 +280,7 @@ func handlePendingTxes(
 		log.Fatal().Err(err).Msg("failed to check pending transactions")
 	}
 	if !exist {
+		log.Info().Msg("No pending transactions exist for signing account.")
 		return
 	}
 	if autoCancel {
