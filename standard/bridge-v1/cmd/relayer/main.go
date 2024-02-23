@@ -127,14 +127,14 @@ func start(c *cli.Context) error {
 	cfg := loadConfigFromEnv()
 
 	configFilePath := c.String(optionConfig.Name)
-	if configFilePath != "" {
+	if configFilePath == "" {
+		log.Info().Msg("env var config will be used")
+	} else {
 		log.Info().Str("config_file", configFilePath).Msg(
 			"overriding env var config with file")
 		if err := loadConfigFromFile(&cfg, configFilePath); err != nil {
 			log.Fatal().Err(err).Msg("failed to load config provided as file")
 		}
-	} else {
-		log.Info().Msg("env var config will be used")
 	}
 
 	if err := checkConfig(&cfg); err != nil {
