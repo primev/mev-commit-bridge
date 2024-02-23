@@ -1,12 +1,6 @@
-priv_key_file_path: "example_config/relayer_key" # Relative path working dir
-http_port: 8080
+priv_key_file_path: "example_config/relayer_key"
 log_level: "debug"
 l1_rpc_url: "http://l1-bootnode:8545"
 settlement_rpc_url: "http://sl-bootnode:8545"
 l1_contract_addr: "0x1a18dfEc4f2B66207b1Ad30aB5c7A0d62Ef4A40b"
 settlement_contract_addr: "0xc1f93bE11D7472c9B9a4d87B41dD0a491F1fbc75"
-pg_host: "localhost"
-pg_port: 5432
-pg_user: "user"
-pg_password: "password"
-pg_dbname: "dbname"
