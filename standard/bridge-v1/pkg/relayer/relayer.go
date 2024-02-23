@@ -19,16 +19,10 @@ import (
 
 type Options struct {
 	PrivateKey             *ecdsa.PrivateKey
-	HTTPPort               int
 	SettlementRPCUrl       string
 	L1RPCUrl               string
 	L1ContractAddr         common.Address
 	SettlementContractAddr common.Address
-	PgHost                 string
-	PgPort                 int
-	PgUser                 string
-	PgPassword             string
-	PgDbname               string
 }
 
 type Relayer struct {
@@ -38,21 +32,7 @@ type Relayer struct {
 }
 
 func NewRelayer(opts *Options) *Relayer {
-
 	r := &Relayer{}
-
-	// TODO: db
-
-	// db, err := initDB(opts)
-	// if err != nil {
-	// 	log.Fatal("failed to init db", err)
-	// }
-	// r.db = db
-
-	// st, err := store.NewStore(db)
-	// if err != nil {
-	// 	log.Fatal("failed to init store", err)
-	// }
 
 	pubKey := &opts.PrivateKey.PublicKey
 	pubKeyBytes := crypto.FromECDSAPub(pubKey)
@@ -180,25 +160,3 @@ func (r *Relayer) TryCloseAll() (err error) {
 		return errors.New(msg)
 	}
 }
-
-// func initDB(opts *Options) (db *sql.DB, err error) {
-// 	// Connection string
-// 	psqlInfo := fmt.Sprintf(
-// 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-// 		opts.PgHost, opts.PgPort, opts.PgUser, opts.PgPassword, opts.PgDbname,
-// 	)
-
-// 	// Open a connection
-// 	db, err = sql.Open("postgres", psqlInfo)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	// Check the connection
-// 	err = db.Ping()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return db, err
-// }
