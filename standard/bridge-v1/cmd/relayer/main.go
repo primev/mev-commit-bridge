@@ -26,7 +26,7 @@ var (
 	optionConfig = &cli.StringFlag{
 		Name:     "config",
 		Usage:    "path to relayer config file",
-		Required: true,
+		Required: false, // Can also set config via env var
 		EnvVars:  []string{"STANDARD_BRIDGE_RELAYER_CONFIG"},
 	}
 )
@@ -53,28 +53,51 @@ func main() {
 	}
 }
 
+func loadConfigFromEnv() config {
+	cfg := config{
+		PrivKeyFilePath:        os.Getenv("PRIVATE_KEY_FILE_PATH"),
+		LogLevel:               os.Getenv("LOG_LEVEL"),
+		L1RPCUrl:               os.Getenv("L1_RPC_URL"),
+		SettlementRPCUrl:       os.Getenv("SETTLEMENT_RPC_URL"),
+		L1ContractAddr:         os.Getenv("L1_CONTRACT_ADDR"),
+		SettlementContractAddr: os.Getenv("SETTLEMENT_CONTRACT_ADDR"),
+	}
+	return cfg
+}
+
+func loadConfigFromFile(cfg *config, filePath string) error {
+	buf, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file at: %s, %w", filePath, err)
+	}
+	if err := yaml.Unmarshal(buf, cfg); err != nil {
+		return fmt.Errorf("failed to unmarshal config file at: %s, %w", filePath, err)
+	}
+	return nil
+}
+
+func setupLogging(logLevel string) {
+	lvl, err := zerolog.ParseLevel(logLevel)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to parse log level")
+	}
+	zerolog.SetGlobalLevel(lvl)
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+}
+
 type config struct {
-	PrivKeyFile            string `yaml:"priv_key_file" json:"priv_key_file"`
-	HTTPPort               int    `yaml:"http_port" json:"http_port"`
+	PrivKeyFilePath        string `yaml:"priv_key_file_path" json:"priv_key_file_path"`
 	LogLevel               string `yaml:"log_level" json:"log_level"`
 	L1RPCUrl               string `yaml:"l1_rpc_url" json:"l1_rpc_url"`
 	SettlementRPCUrl       string `yaml:"settlement_rpc_url" json:"settlement_rpc_url"`
 	L1ContractAddr         string `yaml:"l1_contract_addr" json:"l1_contract_addr"`
 	SettlementContractAddr string `yaml:"settlement_contract_addr" json:"settlement_contract_addr"`
-	PgHost                 string `yaml:"pg_host" json:"pg_host"`
-	PgPort                 int    `yaml:"pg_port" json:"pg_port"`
-	PgUser                 string `yaml:"pg_user" json:"pg_user"`
-	PgPassword             string `yaml:"pg_password" json:"pg_password"`
-	PgDbname               string `yaml:"pg_dbname" json:"pg_dbname"`
 }
 
 func checkConfig(cfg *config) error {
-	if cfg.PrivKeyFile == "" {
-		return fmt.Errorf("priv_key_file is required")
-	}
-
-	if cfg.HTTPPort == 0 {
-		cfg.HTTPPort = defaultHTTPPort
+	if cfg.PrivKeyFilePath == "" {
+		return fmt.Errorf("priv_key_file_path is required")
 	}
 
 	if cfg.LogLevel == "" {
@@ -97,67 +120,50 @@ func checkConfig(cfg *config) error {
 		return fmt.Errorf("preconf_contract_addr is required")
 	}
 
-	if cfg.PgHost == "" || cfg.PgPort == 0 || cfg.PgUser == "" || cfg.PgPassword == "" || cfg.PgDbname == "" {
-		return fmt.Errorf("pg_host, pg_port, pg_user, pg_password, pg_dbname are required")
-	}
-
 	return nil
 }
 
 func start(c *cli.Context) error {
+	cfg := loadConfigFromEnv()
 
 	configFilePath := c.String(optionConfig.Name)
-
-	var cfg config
-	buf, err := os.ReadFile(configFilePath)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to read config file at: " + configFilePath)
-	}
-
-	if err := yaml.Unmarshal(buf, &cfg); err != nil {
-		log.Fatal().Err(err).Msg("failed to unmarshal config file at: " + configFilePath)
+	if configFilePath != "" {
+		log.Info().Str("config_file", configFilePath).Msg(
+			"overriding env var config with file")
+		if err := loadConfigFromFile(&cfg, configFilePath); err != nil {
+			log.Fatal().Err(err).Msg("failed to load config provided as file")
+		}
+	} else {
+		log.Info().Msg("env var config will be used")
 	}
 
 	if err := checkConfig(&cfg); err != nil {
 		log.Fatal().Err(err).Msg("invalid config")
 	}
 
-	lvl, err := zerolog.ParseLevel(cfg.LogLevel)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to parse log level")
-	}
+	setupLogging(cfg.LogLevel)
 
-	zerolog.SetGlobalLevel(lvl)
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	privKeyFilePath := cfg.PrivKeyFilePath
 
-	privKeyFile := cfg.PrivKeyFile
-
-	if strings.HasPrefix(privKeyFile, "~/") {
+	if strings.HasPrefix(privKeyFilePath, "~/") {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			log.Err(err).Msg("failed to get user home dir")
 		}
-		privKeyFile = filepath.Join(homeDir, privKeyFile[2:])
+		privKeyFilePath = filepath.Join(homeDir, privKeyFilePath[2:])
 	}
 
-	privKey, err := crypto.LoadECDSA(privKeyFile)
+	privKey, err := crypto.LoadECDSA(privKeyFilePath)
 	if err != nil {
 		log.Err(err).Msg("failed to load private key")
 	}
 
 	r := relayer.NewRelayer(&relayer.Options{
 		PrivateKey:             privKey,
-		HTTPPort:               cfg.HTTPPort,
 		L1RPCUrl:               cfg.L1RPCUrl,
 		SettlementRPCUrl:       cfg.SettlementRPCUrl,
 		L1ContractAddr:         common.HexToAddress(cfg.L1ContractAddr),
 		SettlementContractAddr: common.HexToAddress(cfg.SettlementContractAddr),
-		PgHost:                 cfg.PgHost,
-		PgPort:                 cfg.PgPort,
-		PgUser:                 cfg.PgUser,
-		PgPassword:             cfg.PgPassword,
-		PgDbname:               cfg.PgDbname,
 	})
 
 	interruptSigChan := make(chan os.Signal, 1)
