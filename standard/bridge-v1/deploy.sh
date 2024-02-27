@@ -87,7 +87,18 @@ SETTLEMENT_DEPLOYER_ADDR=$(cast wallet address "$SETTLEMENT_DEPLOYER_PRIVKEY")
 check_balance "$SETTLEMENT_RPC_URL" "$SETTLEMENT_DEPLOYER_ADDR"
 
 check_balance "$L1_RPC_URL" "$RELAYER_ADDR"
+
+cast send \
+    --rpc-url "$SETTLEMENT_RPC_URL" \
+    --private-key "$SETTLEMENT_DEPLOYER_PRIVKEY" \
+    "$RELAYER_ADDR" \
+    --value 100ether
+
 check_balance "$SETTLEMENT_RPC_URL" "$RELAYER_ADDR"
+
+EXPECTED_WHITELIST_ADDR="0x57508f0B0f3426758F1f3D63ad4935a7c9383620"
+
+check_balance "$SETTLEMENT_RPC_URL" "$EXPECTED_WHITELIST_ADDR"
 
 SCRIPTS_PATH_PREFIX="$CONTRACTS_PATH/scripts/"
 
@@ -103,24 +114,11 @@ RELAYER_ADDR="$RELAYER_ADDR" forge script \
     -vvvv \
     --use 0.8.23
 
-# TODO: retrieve addr and pass as SETTLEMENT_GATEWAY_ADDR
-
-# SETTLEMENT_GATEWAY_ADDR="0x0"
-
-# HYP_ERC20_ADDR="$SETTLEMENT_GATEWAY_ADDR" forge script \
-#     "${SCRIPTS_PATH_PREFIX}"DeployScripts.s.sol:DeployWhitelist \
-#     --rpc-url "$SETTLEMENT_RPC_URL" \
-#     --private-key "$SETTLEMENT_DEPLOYER_PRIVKEY" \
-#     --broadcast \
-#     --chain-id "$SETTLEMENT_CHAIN_ID" \
-#     -vvvv \
-#     --use 0.8.23
-
-# RELAYER_ADDR="$RELAYER_ADDR" forge script \
-#     "${SCRIPTS_PATH_PREFIX}"DeployStandardBridge.s.sol:DeployL1Gateway \
-#     --rpc-url "$L1_RPC_URL" \
-#     --private-key "$L1_DEPLOYER_PRIVKEY" \
-#     --broadcast \
-#     --chain-id "$L1_CHAIN_ID" \
-#     -vvvv \
-#     --use 0.8.23
+RELAYER_ADDR="$RELAYER_ADDR" forge script \
+    "${SCRIPTS_PATH_PREFIX}"DeployStandardBridge.s.sol:DeployL1Gateway \
+    --rpc-url "$L1_RPC_URL" \
+    --private-key "$L1_DEPLOYER_PRIVKEY" \
+    --broadcast \
+    --chain-id "$L1_CHAIN_ID" \
+    -vvvv \
+    --use 0.8.23
