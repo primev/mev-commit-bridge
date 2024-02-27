@@ -60,7 +60,7 @@ check_create2() {
 check_balance() {
     RPC_URL="$1"
     ADDR="$2"
-    BALANCE_WEI=$(cast balance $ADDR --rpc-url "$RPC_URL")
+    BALANCE_WEI=$(cast balance "$ADDR" --rpc-url "$RPC_URL")
     ONE_ETH_WEI="1000000000000000000"
 
     SUFFICIENT=$(echo "$BALANCE_WEI >= $ONE_ETH_WEI" | bc)
