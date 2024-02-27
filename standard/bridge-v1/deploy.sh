@@ -7,7 +7,7 @@ SETTLEMENT_DEPLOYER_PRIVKEY=${DEPLOYER_PRIVKEY:-"0xac0974bec39a17e36ba4a6b4d238f
 
 fail_if_not_set() {
     if [ -z "$1" ]; then
-        echo "Error: Required environment variable not set."
+        echo "Error: Required environment variable not set (one of SETTLEMENT_RPC_URL, L1_DEPLOYER_PRIVKEY, and RELAYER_ADDR)"
         exit 1
     fi
 }
@@ -62,7 +62,9 @@ check_balance() {
     ADDR="$2"
     BALANCE_WEI=$(cast balance $ADDR --rpc-url "$RPC_URL")
     ONE_ETH_WEI="1000000000000000000"
-    if [ "$BALANCE_WEI" -lt "$ONE_ETH_WEI" ]; then
+
+    SUFFICIENT=$(echo "$BALANCE_WEI >= $ONE_ETH_WEI" | bc)
+    if [ "$SUFFICIENT" -eq 0 ]; then
         echo "Error: $ADDR has insufficient balance on chain with RPC URL $RPC_URL. Balance: $BALANCE_WEI wei"
         exit 1
     else
