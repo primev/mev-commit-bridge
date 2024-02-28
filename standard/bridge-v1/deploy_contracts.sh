@@ -5,6 +5,15 @@ L1_RPC_URL=${L1_RPC_URL:-"https://ethereum-holesky.publicnode.com"}
 SETTLEMENT_CHAIN_ID=${SETTLEMENT_CHAIN_ID:-"17864"}
 SETTLEMENT_DEPLOYER_PRIVKEY=${DEPLOYER_PRIVKEY:-"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"} # Same default deployer as core contracts
 
+FORGE_BIN_PATH=${FORGE_BIN_PATH:-"forge"}
+CAST_BIN_PATH=${CAST_BIN_PATH:-"cast"}
+
+CONTRACTS_PATH=${CONTRACTS_PATH:-"$HOME/.primev/contracts"}
+if [ ! -d "$CONTRACTS_PATH" ]; then
+    echo "Error: Contracts path not found at $CONTRACTS_PATH. Please ensure the contracts are installed and the path is correct."
+    exit 1
+fi
+
 fail_if_not_set() {
     if [ -z "$1" ]; then
         echo "Error: Required environment variable not set (one of SETTLEMENT_RPC_URL, L1_DEPLOYER_PRIVKEY, and RELAYER_ADDR)"
@@ -14,24 +23,6 @@ fail_if_not_set() {
 fail_if_not_set "${SETTLEMENT_RPC_URL}"
 fail_if_not_set "${L1_DEPLOYER_PRIVKEY}"
 fail_if_not_set "${RELAYER_ADDR}"
-
-CONTRACTS_PATH=${CONTRACTS_PATH:-"$HOME/.primev/contracts"}
-if [ ! -d "$CONTRACTS_PATH" ]; then
-    echo "Error: Contracts path not found at $CONTRACTS_PATH. Please ensure the contracts are installed and the path is correct."
-    exit 1
-fi
-
-check_foundry_installed() {
-    if ! command -v cast > /dev/null 2>&1; then
-        echo "Error: Foundry's 'cast' command not found. Please install Foundry and ensure it is in your PATH."
-        exit 1
-    fi
-    if ! command -v forge > /dev/null 2>&1; then
-        echo "Error: Foundry's 'forge' command not found. Please install Foundry and ensure it is in your PATH."
-        exit 1
-    fi
-    echo "Foundry CLI tools 'cast' and 'forge' are both installed."
-}
 
 check_chain_id() {
     RPC_URL="$1"
@@ -71,8 +62,6 @@ check_balance() {
         echo "Confirmed: $ADDR has sufficient balance (>= 1 ETH) on chain with RPC URL $RPC_URL. Balance: $BALANCE_WEI wei"
     fi
 }
-
-check_foundry_installed
 
 check_chain_id "$L1_RPC_URL" "$L1_CHAIN_ID"
 check_chain_id "$SETTLEMENT_RPC_URL" "$SETTLEMENT_CHAIN_ID"
