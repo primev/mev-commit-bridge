@@ -92,6 +92,8 @@ check_balance "$SETTLEMENT_RPC_URL" "$EXPECTED_WHITELIST_ADDR"
 echo "changing directory to $CONTRACTS_PATH and running deploy scripts for standard bridge"
 cd "$CONTRACTS_PATH" || exit
 
+# TODO: write to outpath (absolute?)
+
 RELAYER_ADDR="$RELAYER_ADDR" forge script \
     "scripts/DeployStandardBridge.s.sol:DeploySettlementGateway" \
     --rpc-url "$SETTLEMENT_RPC_URL" \
@@ -99,7 +101,9 @@ RELAYER_ADDR="$RELAYER_ADDR" forge script \
     --broadcast \
     --chain-id "$SETTLEMENT_CHAIN_ID" \
     -vvvv \
-    --use 0.8.23
+    --use 0.8.23 | tee deploy_sg_output.txt
+
+awk -F"JSON_DEPLOY_ARTIFACT: " '/JSON_DEPLOY_ARTIFACT:/ {print $2}' deploy_sg_output.txt | sed '/^$/d' > SettlementGatewayArtifact.json
 
 RELAYER_ADDR="$RELAYER_ADDR" forge script \
     "scripts/DeployStandardBridge.s.sol:DeployL1Gateway" \
@@ -108,4 +112,8 @@ RELAYER_ADDR="$RELAYER_ADDR" forge script \
     --broadcast \
     --chain-id "$L1_CHAIN_ID" \
     -vvvv \
-    --use 0.8.23
+    --use 0.8.23 | tee deploy_l1g_output.txt
+
+awk -F"JSON_DEPLOY_ARTIFACT: " '/JSON_DEPLOY_ARTIFACT:/ {print $2}' deploy_l1g_output.txt | sed '/^$/d' > L1GatewayArtifact.json
+
+rm deploy_sg_output.txt deploy_l1g_output.txt
