@@ -14,6 +14,9 @@ if [ ! -d "$CONTRACTS_PATH" ]; then
     exit 1
 fi
 
+ARTIFACT_OUT_PATH=${ARTIFACT_OUT_PATH:-"$HOME/.primev/contracts"}
+ARTIFACT_OUT_PATH=$(realpath "$ARTIFACT_OUT_PATH")
+
 fail_if_not_set() {
     if [ -z "$1" ]; then
         echo "Error: Required environment variable not set (one of SETTLEMENT_RPC_URL, L1_DEPLOYER_PRIVKEY, and RELAYER_ADDR)"
@@ -115,5 +118,8 @@ RELAYER_ADDR="$RELAYER_ADDR" forge script \
     --use 0.8.23 | tee deploy_l1g_output.txt
 
 awk -F"JSON_DEPLOY_ARTIFACT: " '/JSON_DEPLOY_ARTIFACT:/ {print $2}' deploy_l1g_output.txt | sed '/^$/d' > L1GatewayArtifact.json
+
+mv SettlementGatewayArtifact.json "$ARTIFACT_OUT_PATH"
+mv L1GatewayArtifact.json "$ARTIFACT_OUT_PATH"
 
 rm deploy_sg_output.txt deploy_l1g_output.txt
