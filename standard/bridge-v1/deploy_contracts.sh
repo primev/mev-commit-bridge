@@ -90,13 +90,11 @@ EXPECTED_WHITELIST_ADDR="0x57508f0B0f3426758F1f3D63ad4935a7c9383620"
 
 check_balance "$SETTLEMENT_RPC_URL" "$EXPECTED_WHITELIST_ADDR"
 
-SCRIPTS_PATH_PREFIX="$CONTRACTS_PATH/scripts/"
-
 echo "changing directory to $CONTRACTS_PATH and running deploy scripts for standard bridge"
 cd "$CONTRACTS_PATH" || exit
 
 RELAYER_ADDR="$RELAYER_ADDR" forge script \
-    "${SCRIPTS_PATH_PREFIX}"DeployStandardBridge.s.sol:DeploySettlementGateway \
+    "scripts/DeployStandardBridge.s.sol:DeploySettlementGateway" \
     --rpc-url "$SETTLEMENT_RPC_URL" \
     --private-key "$SETTLEMENT_DEPLOYER_PRIVKEY" \
     --broadcast \
@@ -106,7 +104,7 @@ RELAYER_ADDR="$RELAYER_ADDR" forge script \
     --root "$CONTRACT_REPO_ROOT_PATH"
 
 RELAYER_ADDR="$RELAYER_ADDR" forge script \
-    "${SCRIPTS_PATH_PREFIX}"DeployStandardBridge.s.sol:DeployL1Gateway \
+    "scripts/DeployStandardBridge.s.sol:DeployL1Gateway" \
     --rpc-url "$L1_RPC_URL" \
     --private-key "$L1_DEPLOYER_PRIVKEY" \
     --broadcast \
