@@ -5,8 +5,16 @@ L1_RPC_URL=${L1_RPC_URL:-"https://ethereum-holesky.publicnode.com"}
 SETTLEMENT_CHAIN_ID=${SETTLEMENT_CHAIN_ID:-"17864"}
 SETTLEMENT_DEPLOYER_PRIVKEY=${DEPLOYER_PRIVKEY:-"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"} # Same default deployer as core contracts
 
-FORGE_BIN_PATH=${FORGE_BIN_PATH:-"forge"}
-CAST_BIN_PATH=${CAST_BIN_PATH:-"cast"}
+if [ -n "$FORGE_BIN_PATH" ]; then
+    FORGE_BIN_PATH=$(realpath "$FORGE_BIN_PATH")
+else
+    FORGE_BIN_PATH="forge"
+fi
+if [ -n "$CAST_BIN_PATH" ]; then
+    CAST_BIN_PATH=$(realpath "$CAST_BIN_PATH")
+else
+    CAST_BIN_PATH="cast"
+fi
 
 CONTRACTS_PATH=${CONTRACTS_PATH:-"$HOME/.primev/contracts"}
 if [ ! -d "$CONTRACTS_PATH" ]; then
