@@ -98,6 +98,9 @@ echo "SCRIPTS_PATH_PREFIX: $SCRIPTS_PATH_PREFIX"
 echo "changing directory to $CONTRACTS_PATH and running deploy scripts for standard bridge"
 cd "$CONTRACTS_PATH" || exit
 
+echo "working directory before deploy: $(pwd)"
+echo "ls before deploy: $(ls)"
+
 RELAYER_ADDR="$RELAYER_ADDR" forge script \
     "${SCRIPTS_PATH_PREFIX}"DeployStandardBridge.s.sol:DeploySettlementGateway \
     --rpc-url "$SETTLEMENT_RPC_URL" \
