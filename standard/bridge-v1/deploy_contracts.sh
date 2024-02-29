@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -x
+
 L1_CHAIN_ID=${L1_CHAIN_ID:-"17000"} # Holesky
 L1_RPC_URL=${L1_RPC_URL:-"https://ethereum-holesky.publicnode.com"}
 SETTLEMENT_CHAIN_ID=${SETTLEMENT_CHAIN_ID:-"17864"}
@@ -91,6 +93,7 @@ EXPECTED_WHITELIST_ADDR="0x57508f0B0f3426758F1f3D63ad4935a7c9383620"
 check_balance "$SETTLEMENT_RPC_URL" "$EXPECTED_WHITELIST_ADDR"
 
 SCRIPTS_PATH_PREFIX="$CONTRACTS_PATH/scripts/"
+echo "SCRIPTS_PATH_PREFIX: $SCRIPTS_PATH_PREFIX"
 
 echo "changing directory to $CONTRACTS_PATH and running deploy scripts for standard bridge"
 cd "$CONTRACTS_PATH" || exit
