@@ -9,7 +9,6 @@ FORGE_BIN_PATH=${FORGE_BIN_PATH:-"forge"}
 CAST_BIN_PATH=${CAST_BIN_PATH:-"cast"}
 
 CONTRACTS_PATH=${CONTRACTS_PATH:-"$HOME/.primev/contracts"}
-CONTRACT_REPO_ROOT_PATH=${CONTRACT_REPO_ROOT_PATH:-"$HOME/.primev/contracts"}
 if [ ! -d "$CONTRACTS_PATH" ]; then
     echo "Error: Contracts path not found at $CONTRACTS_PATH. Please ensure the contracts are installed and the path is correct."
     exit 1
