@@ -19,13 +19,14 @@ ARTIFACT_OUT_PATH=$(realpath "$ARTIFACT_OUT_PATH")
 
 fail_if_not_set() {
     if [ -z "$1" ]; then
-        echo "Error: Required environment variable not set (one of SETTLEMENT_RPC_URL, L1_DEPLOYER_PRIVKEY, and RELAYER_ADDR)"
+        echo "Error: Required environment variable not set (one of SETTLEMENT_RPC_URL, RELAYER_PRIVKEY)"
         exit 1
     fi
 }
 fail_if_not_set "${SETTLEMENT_RPC_URL}"
-fail_if_not_set "${L1_DEPLOYER_PRIVKEY}"
-fail_if_not_set "${RELAYER_ADDR}"
+fail_if_not_set "${RELAYER_PRIVKEY}"
+
+RELAYER_ADDR=$(cast wallet address "$RELAYER_PRIVKEY")
 
 check_chain_id() {
     RPC_URL="$1"
@@ -78,8 +79,6 @@ check_balance "$L1_RPC_URL" "$L1_DEPLOYER_ADDR"
 SETTLEMENT_DEPLOYER_ADDR=$(cast wallet address "$SETTLEMENT_DEPLOYER_PRIVKEY")
 check_balance "$SETTLEMENT_RPC_URL" "$SETTLEMENT_DEPLOYER_ADDR"
 
-check_balance "$L1_RPC_URL" "$RELAYER_ADDR"
-
 cast send \
     --rpc-url "$SETTLEMENT_RPC_URL" \
     --private-key "$SETTLEMENT_DEPLOYER_PRIVKEY" \
@@ -87,9 +86,19 @@ cast send \
     --value 100ether
 
 check_balance "$SETTLEMENT_RPC_URL" "$RELAYER_ADDR"
+check_balance "$L1_RPC_URL" "$RELAYER_ADDR"
+
+# Create/fund a new L1 deployer to avoid L1Gateway contract addr collision on Holeksy
+L1_DEPLOYER_PRIVKEY=$(cast wallet new | grep 'Private key' | awk '{ print $NF }')
+L1_DEPLOYER_ADDR=$(cast wallet address "$L1_DEPLOYER_PRIVKEY")
+echo "New L1 deployer to be funded by relayer: $L1_DEPLOYER_ADDR"
+cast send \
+    --rpc-url "$L1_RPC_URL" \
+    --private-key "$RELAYER_PRIVKEY" \
+    "$L1_DEPLOYER_ADDR" \
+    --value 0.5ether
 
 EXPECTED_WHITELIST_ADDR="0x57508f0B0f3426758F1f3D63ad4935a7c9383620"
-
 check_balance "$SETTLEMENT_RPC_URL" "$EXPECTED_WHITELIST_ADDR"
 
 echo "changing directory to $CONTRACTS_PATH and running deploy scripts for standard bridge"
@@ -105,6 +114,7 @@ RELAYER_ADDR="$RELAYER_ADDR" forge script \
     --use 0.8.23 | tee deploy_sg_output.txt
 
 awk -F"JSON_DEPLOY_ARTIFACT: " '/JSON_DEPLOY_ARTIFACT:/ {print $2}' deploy_sg_output.txt | sed '/^$/d' > SettlementGatewayArtifact.json
+mv SettlementGatewayArtifact.json "$ARTIFACT_OUT_PATH"
 
 RELAYER_ADDR="$RELAYER_ADDR" forge script \
     "scripts/DeployStandardBridge.s.sol:DeployL1Gateway" \
@@ -116,8 +126,6 @@ RELAYER_ADDR="$RELAYER_ADDR" forge script \
     --use 0.8.23 | tee deploy_l1g_output.txt
 
 awk -F"JSON_DEPLOY_ARTIFACT: " '/JSON_DEPLOY_ARTIFACT:/ {print $2}' deploy_l1g_output.txt | sed '/^$/d' > L1GatewayArtifact.json
-
-mv SettlementGatewayArtifact.json "$ARTIFACT_OUT_PATH"
 mv L1GatewayArtifact.json "$ARTIFACT_OUT_PATH"
 
 rm deploy_sg_output.txt deploy_l1g_output.txt
