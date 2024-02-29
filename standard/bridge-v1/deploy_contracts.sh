@@ -26,12 +26,12 @@ fail_if_not_set() {
 fail_if_not_set "${SETTLEMENT_RPC_URL}"
 fail_if_not_set "${RELAYER_PRIVKEY}"
 
-RELAYER_ADDR=$(cast wallet address "$RELAYER_PRIVKEY")
+RELAYER_ADDR=$("$CAST_BIN_PATH" wallet address "$RELAYER_PRIVKEY")
 
 check_chain_id() {
     RPC_URL="$1"
     EXPECTED_CHAIN_ID="$2"
-    RETRIEVED_CHAIN_ID=$(cast chain-id --rpc-url "$RPC_URL")
+    RETRIEVED_CHAIN_ID=$("$CAST_BIN_PATH" chain-id --rpc-url "$RPC_URL")
     if [ "$RETRIEVED_CHAIN_ID" -ne "$EXPECTED_CHAIN_ID" ]; then
         echo "Error: Chain ID mismatch for $RPC_URL. Expected: $EXPECTED_CHAIN_ID, Got: $RETRIEVED_CHAIN_ID"
         exit 1
@@ -43,7 +43,7 @@ check_chain_id() {
 check_create2() {
     RPC_URL="$1"
     CREATE2_AADR="0x4e59b44847b379578588920ca78fbf26c0b4956c"
-    CODE=$(cast code --rpc-url "$RPC_URL" $CREATE2_AADR)
+    CODE=$("$CAST_BIN_PATH" code --rpc-url "$RPC_URL" $CREATE2_AADR)
     if [ -z "$CODE" ] || [ "$CODE" = "0x" ]; then
         echo "Create2 proxy not deployed on $RPC_URL"
         exit 1
@@ -55,7 +55,7 @@ check_create2() {
 check_balance() {
     RPC_URL="$1"
     ADDR="$2"
-    BALANCE_WEI=$(cast balance "$ADDR" --rpc-url "$RPC_URL")
+    BALANCE_WEI=$("$CAST_BIN_PATH" balance "$ADDR" --rpc-url "$RPC_URL")
     ONE_ETH_WEI="1000000000000000000"
 
     SUFFICIENT=$(echo "$BALANCE_WEI >= $ONE_ETH_WEI" | bc)
@@ -73,13 +73,13 @@ check_chain_id "$SETTLEMENT_RPC_URL" "$SETTLEMENT_CHAIN_ID"
 check_create2 "$L1_RPC_URL"
 check_create2 "$SETTLEMENT_RPC_URL"
 
-L1_DEPLOYER_ADDR=$(cast wallet address "$L1_DEPLOYER_PRIVKEY")
+L1_DEPLOYER_ADDR=$("$CAST_BIN_PATH" wallet address "$L1_DEPLOYER_PRIVKEY")
 check_balance "$L1_RPC_URL" "$L1_DEPLOYER_ADDR"
 
-SETTLEMENT_DEPLOYER_ADDR=$(cast wallet address "$SETTLEMENT_DEPLOYER_PRIVKEY")
+SETTLEMENT_DEPLOYER_ADDR=$("$CAST_BIN_PATH" wallet address "$SETTLEMENT_DEPLOYER_PRIVKEY")
 check_balance "$SETTLEMENT_RPC_URL" "$SETTLEMENT_DEPLOYER_ADDR"
 
-cast send \
+"$CAST_BIN_PATH" send \
     --rpc-url "$SETTLEMENT_RPC_URL" \
     --private-key "$SETTLEMENT_DEPLOYER_PRIVKEY" \
     "$RELAYER_ADDR" \
@@ -89,10 +89,10 @@ check_balance "$SETTLEMENT_RPC_URL" "$RELAYER_ADDR"
 check_balance "$L1_RPC_URL" "$RELAYER_ADDR"
 
 # Create/fund a new L1 deployer to avoid L1Gateway contract addr collision on Holeksy
-L1_DEPLOYER_PRIVKEY=$(cast wallet new | grep 'Private key' | awk '{ print $NF }')
-L1_DEPLOYER_ADDR=$(cast wallet address "$L1_DEPLOYER_PRIVKEY")
+L1_DEPLOYER_PRIVKEY=$($CAST_BIN_PATH wallet new | grep 'Private key' | awk '{ print $NF }')
+L1_DEPLOYER_ADDR=$($CAST_BIN_PATH wallet address "$L1_DEPLOYER_PRIVKEY")
 echo "New L1 deployer to be funded by relayer: $L1_DEPLOYER_ADDR"
-cast send \
+$CAST_BIN_PATH send \
     --rpc-url "$L1_RPC_URL" \
     --private-key "$RELAYER_PRIVKEY" \
     "$L1_DEPLOYER_ADDR" \
@@ -104,7 +104,7 @@ check_balance "$SETTLEMENT_RPC_URL" "$EXPECTED_WHITELIST_ADDR"
 echo "changing directory to $CONTRACTS_PATH and running deploy scripts for standard bridge"
 cd "$CONTRACTS_PATH" || exit
 
-RELAYER_ADDR="$RELAYER_ADDR" forge script \
+RELAYER_ADDR="$RELAYER_ADDR" $FORGE_BIN_PATH script \
     "scripts/DeployStandardBridge.s.sol:DeploySettlementGateway" \
     --rpc-url "$SETTLEMENT_RPC_URL" \
     --private-key "$SETTLEMENT_DEPLOYER_PRIVKEY" \
@@ -116,7 +116,7 @@ RELAYER_ADDR="$RELAYER_ADDR" forge script \
 awk -F"JSON_DEPLOY_ARTIFACT: " '/JSON_DEPLOY_ARTIFACT:/ {print $2}' deploy_sg_output.txt | sed '/^$/d' > SettlementGatewayArtifact.json
 mv SettlementGatewayArtifact.json "$ARTIFACT_OUT_PATH"
 
-RELAYER_ADDR="$RELAYER_ADDR" forge script \
+RELAYER_ADDR="$RELAYER_ADDR" $FORGE_BIN_PATH script \
     "scripts/DeployStandardBridge.s.sol:DeployL1Gateway" \
     --rpc-url "$L1_RPC_URL" \
     --private-key "$L1_DEPLOYER_PRIVKEY" \
