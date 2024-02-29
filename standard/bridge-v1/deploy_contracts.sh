@@ -9,6 +9,7 @@ FORGE_BIN_PATH=${FORGE_BIN_PATH:-"forge"}
 CAST_BIN_PATH=${CAST_BIN_PATH:-"cast"}
 
 CONTRACTS_PATH=${CONTRACTS_PATH:-"$HOME/.primev/contracts"}
+CONTRACT_REPO_ROOT_PATH=${CONTRACT_REPO_ROOT_PATH:-"$HOME/.primev/contracts"}
 if [ ! -d "$CONTRACTS_PATH" ]; then
     echo "Error: Contracts path not found at $CONTRACTS_PATH. Please ensure the contracts are installed and the path is correct."
     exit 1
@@ -101,7 +102,8 @@ RELAYER_ADDR="$RELAYER_ADDR" forge script \
     --broadcast \
     --chain-id "$SETTLEMENT_CHAIN_ID" \
     -vvvv \
-    --use 0.8.23
+    --use 0.8.23 \
+    --root "$CONTRACT_REPO_ROOT_PATH"
 
 RELAYER_ADDR="$RELAYER_ADDR" forge script \
     "${SCRIPTS_PATH_PREFIX}"DeployStandardBridge.s.sol:DeployL1Gateway \
@@ -110,4 +112,5 @@ RELAYER_ADDR="$RELAYER_ADDR" forge script \
     --broadcast \
     --chain-id "$L1_CHAIN_ID" \
     -vvvv \
-    --use 0.8.23
+    --use 0.8.23 \
+    --root "$CONTRACT_REPO_ROOT_PATH"
