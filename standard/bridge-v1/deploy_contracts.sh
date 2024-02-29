@@ -1,7 +1,5 @@
 #!/bin/sh
 
-set -x
-
 L1_CHAIN_ID=${L1_CHAIN_ID:-"17000"} # Holesky
 L1_RPC_URL=${L1_RPC_URL:-"https://ethereum-holesky.publicnode.com"}
 SETTLEMENT_CHAIN_ID=${SETTLEMENT_CHAIN_ID:-"17864"}
