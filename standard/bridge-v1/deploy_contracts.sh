@@ -99,7 +99,7 @@ RELAYER_ADDR="$RELAYER_ADDR" forge script \
     --broadcast \
     --chain-id "$SETTLEMENT_CHAIN_ID" \
     -vvvv \
-    --use 0.8.23 
+    --use 0.8.23
 
 RELAYER_ADDR="$RELAYER_ADDR" forge script \
     "scripts/DeployStandardBridge.s.sol:DeployL1Gateway" \
