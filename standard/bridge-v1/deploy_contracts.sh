@@ -95,8 +95,6 @@ check_balance "$SETTLEMENT_RPC_URL" "$EXPECTED_WHITELIST_ADDR"
 echo "changing directory to $CONTRACTS_PATH and running deploy scripts for standard bridge"
 cd "$CONTRACTS_PATH" || exit
 
-# TODO: write to outpath (absolute?)
-
 RELAYER_ADDR="$RELAYER_ADDR" forge script \
     "scripts/DeployStandardBridge.s.sol:DeploySettlementGateway" \
     --rpc-url "$SETTLEMENT_RPC_URL" \
