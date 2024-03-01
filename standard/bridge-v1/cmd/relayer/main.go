@@ -83,7 +83,7 @@ func setupLogging(logLevel string) {
 	}
 	zerolog.SetGlobalLevel(lvl)
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	log.Logger = log.Output(os.Stdout).With().Caller().Logger()
 }
 
 type config struct {
