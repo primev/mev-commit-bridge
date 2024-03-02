@@ -10,6 +10,8 @@ First build the user cli for your machine from this directory:
 make user_cli
 ```
 
+Or use a pre-built binary from the `releases` tab.
+
 Set proper environment variables for a cross-chain transfer, example below:
 
 ```bash 
