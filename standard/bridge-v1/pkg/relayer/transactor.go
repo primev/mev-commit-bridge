@@ -91,13 +91,13 @@ func (t *Transactor) Start(
 				t.chain, event.Chain.String(), event.Recipient, event.Amount, event.TransferIdx)
 			opts, err := shared.CreateTransactOpts(ctx, t.privateKey, t.chainID, t.rawClient)
 			if err != nil {
-				log.Err(err).Msg("failed to create transact opts for transfer finalization tx. Relayer likely requires restart.")
+				log.Err(err).Msg("failed to create transact opts for transfer finalization tx.")
 				log.Warn().Msgf("skipping transfer finalization tx for src transfer idx: %d", event.TransferIdx)
 				continue
 			}
 			finalized, err := t.transferAlreadyFinalized(ctx, event.TransferIdx)
 			if err != nil {
-				log.Err(err).Msg("failed to check if transfer already finalized. Relayer likely requires restart.")
+				log.Err(err).Msg("failed to check if transfer already finalized.")
 				log.Warn().Msgf("skipping transfer finalization tx for src transfer idx: %d", event.TransferIdx)
 				continue
 			}
@@ -106,7 +106,7 @@ func (t *Transactor) Start(
 			}
 			receipt, err := t.sendFinalizeTransfer(ctx, opts, event)
 			if err != nil {
-				log.Err(err).Msg("failed to send transfer finalization tx. Relayer likely requires restart.")
+				log.Err(err).Msg("failed to send transfer finalization tx.")
 				log.Warn().Msgf("skipping transfer finalization tx for src transfer idx: %d", event.TransferIdx)
 				continue
 			}
@@ -116,7 +116,6 @@ func (t *Transactor) Start(
 			_, found, err := t.obtainTransferFinalizedAndUpdateCache(ctx, filterOpts, event.TransferIdx)
 			if err != nil {
 				log.Err(err).Msg("failed to obtain transfer finalized event after sending tx")
-				log.Warn().Msg("TransferFinalized cache will be incorrect. Relayer likely requires restart.")
 				continue
 			}
 			if !found {

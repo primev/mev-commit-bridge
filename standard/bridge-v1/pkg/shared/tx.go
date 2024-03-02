@@ -146,6 +146,9 @@ func WaitMinedWithRetry(
 				log.Warn().Err(err).Msgf("Tx submission failed on attempt %d: %s", attempt, err)
 				continue
 			}
+			if strings.Contains(err.Error(), "nonce too low") {
+				log.Warn().Msg("Likely the previous tx attempt was included at the last moment. Relayer should continue as normal.")
+			}
 			return nil, fmt.Errorf("tx submission failed on attempt %d: %w", attempt, err)
 		}
 
