@@ -4,29 +4,39 @@ This document outlines multiple iteration plans for a simple lock and mint bridg
 
 ## User Quickstart
 
-To bridge from L1 to the mev-commit chain, first configure a yaml file with the format found at `example_config/user_config.yml`, example below:
-
-```yaml
-priv_key_file: "example_config/user_key" # Relative path from working dir
-log_level: "debug"
-l1_rpc_url: "http://localhost:9545"
-settlement_rpc_url: "http://localhost:8545"
-l1_chain_id: 39999
-settlement_chain_id: 17864
-l1_contract_addr: "0x1a18dfEc4f2B66207b1Ad30aB5c7A0d62Ef4A40b"
-settlement_contract_addr: "0xc1f93bE11D7472c9B9a4d87B41dD0a491F1fbc75"
-
-```
-
-To build the user cli, and make a cross chain transfer:
+First build the user cli for your machine from this directory:
 
 ```bash
 make user_cli
 ```
 
-```bash
-./bin/user_cli bridge-to-l1 --amount $AMOUNT --dest-addr $DEST_ADDR --config "example_config/user_config.yml"
+Set proper environment variables for a cross-chain transfer, example below:
+
+```bash 
+export PRIVATE_KEY="0xe82a054e06f89598485134b4f2ce8a612ce7f7f7e14e650f9f20b30efddd0e57"
+export LOG_LEVEL="debug"
+export L1_RPC_URL="https://ethereum-holesky.publicnode.com"
+export SETTLEMENT_RPC_URL="https://chainrpc.testnet.mev-commit.xyz"
+export L1_CHAIN_ID="17000"
+export SETTLEMENT_CHAIN_ID="17864"
+export L1_CONTRACT_ADDR="0xceff0a364f63f621ff6a8b5ce56569ec6f3c6220"
+export SETTLEMENT_CONTRACT_ADDR="0xf60f8e762a3fe90fd4d8c005872b6f6e12eda8ca"
 ```
+
+To bridge ether from Holesky to the mev-commit chain, use:
+
+```bash
+./bin/user_cli bridge-to-settlement --amount $AMOUNT_IN_WEI --dest-addr $DEST_ADDR
+```
+
+Where `PRIVATE_KEY` corresponds to an account that's funded on Holesky. 
+
+To bridge ether back to Holesky from the mev-commit chain, use:
+
+```bash
+./bin/user_cli bridge-to-l1 --amount $AMOUNT_IN_WEI --dest-addr $DEST_ADDR
+```
+Where `PRIVATE_KEY` corresponds to an account that's funded on the mev-commit chain.
 
 ## Relayer
 

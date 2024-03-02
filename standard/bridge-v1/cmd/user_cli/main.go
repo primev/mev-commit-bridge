@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"path/filepath"
 	"standard-bridge/pkg/shared"
 	transfer "standard-bridge/pkg/transfer"
+	"strconv"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -17,16 +17,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
-	"gopkg.in/yaml.v2"
-)
-
-var (
-	optionConfig = &cli.StringFlag{
-		Name:     "config",
-		Usage:    "path to CLI config file",
-		Required: true,
-		EnvVars:  []string{"STANDARD_BRIDGE_CLI_CONFIG"},
-	}
 )
 
 func main() {
@@ -52,7 +42,6 @@ func main() {
 						Name:  "cancel-pending",
 						Usage: "Automatically cancel existing pending transactions",
 					},
-					optionConfig,
 				},
 				Action: func(c *cli.Context) error {
 					return bridgeToSettlement(c)
@@ -76,7 +65,6 @@ func main() {
 						Name:  "cancel-pending",
 						Usage: "Automatically cancel existing pending transactions",
 					},
-					optionConfig,
 				},
 				Action: func(c *cli.Context) error {
 					return bridgeToL1(c)
@@ -146,41 +134,15 @@ type preTransferConfig struct {
 }
 
 func preTransfer(c *cli.Context) preTransferConfig {
+	cfg := loadConfigFromEnv()
 
-	configFilePath := c.String(optionConfig.Name)
-
-	var cfg config
-	buf, err := os.ReadFile(configFilePath)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to read config file at: " + configFilePath)
-	}
-
-	if err := yaml.Unmarshal(buf, &cfg); err != nil {
-		log.Fatal().Err(err).Msg("failed to unmarshal config file at: " + configFilePath)
-	}
-
-	if err := checkConfig(&cfg); err != nil {
+	if err := checkEnvConfig(&cfg); err != nil {
 		log.Fatal().Err(err).Msg("invalid config")
 	}
+	setupLogging(cfg.LogLevel)
 
-	lvl, err := zerolog.ParseLevel(cfg.LogLevel)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to parse log level")
-	}
-	zerolog.SetGlobalLevel(lvl)
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-
-	privKeyFile := cfg.PrivKeyFile
-	if strings.HasPrefix(privKeyFile, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			log.Err(err).Msg("failed to get user home dir")
-		}
-		privKeyFile = filepath.Join(homeDir, privKeyFile[2:])
-	}
-
-	privKey, err := crypto.LoadECDSA(privKeyFile)
+	privKeyTrimmed := strings.TrimPrefix(cfg.PrivKey, "0x")
+	privKey, err := crypto.HexToECDSA(privKeyTrimmed)
 	if err != nil {
 		log.Err(err).Msg("failed to load private key")
 	}
@@ -206,20 +168,44 @@ func preTransfer(c *cli.Context) preTransferConfig {
 	}
 }
 
-type config struct {
-	PrivKeyFile            string `yaml:"priv_key_file"`
-	LogLevel               string `yaml:"log_level" json:"log_level"`
-	L1RPCUrl               string `yaml:"l1_rpc_url"`
-	SettlementRPCUrl       string `yaml:"settlement_rpc_url"`
-	L1ChainID              int    `yaml:"l1_chain_id"`
-	SettlementChainID      int    `yaml:"settlement_chain_id"`
-	L1ContractAddr         string `yaml:"l1_contract_addr"`
-	SettlementContractAddr string `yaml:"settlement_contract_addr"`
+type envConfig struct {
+	PrivKey                string
+	LogLevel               string
+	L1RPCUrl               string
+	SettlementRPCUrl       string
+	L1ChainID              int
+	SettlementChainID      int
+	L1ContractAddr         string
+	SettlementContractAddr string
 }
 
-func checkConfig(cfg *config) error {
-	if cfg.PrivKeyFile == "" {
-		return fmt.Errorf("priv_key_file is required")
+func loadConfigFromEnv() envConfig {
+	l1ChainID := os.Getenv("L1_CHAIN_ID")
+	l1ChainIDInt, err := strconv.Atoi(l1ChainID)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to convert L1_CHAIN_ID to int")
+	}
+	settlementChainID := os.Getenv("SETTLEMENT_CHAIN_ID")
+	settlementChainIDInt, err := strconv.Atoi(settlementChainID)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to convert SETTLEMENT_CHAIN_ID to int")
+	}
+	cfg := envConfig{
+		PrivKey:                os.Getenv("PRIVATE_KEY"),
+		LogLevel:               os.Getenv("LOG_LEVEL"),
+		L1RPCUrl:               os.Getenv("L1_RPC_URL"),
+		SettlementRPCUrl:       os.Getenv("SETTLEMENT_RPC_URL"),
+		L1ChainID:              l1ChainIDInt,
+		SettlementChainID:      settlementChainIDInt,
+		L1ContractAddr:         os.Getenv("L1_CONTRACT_ADDR"),
+		SettlementContractAddr: os.Getenv("SETTLEMENT_CONTRACT_ADDR"),
+	}
+	return cfg
+}
+
+func checkEnvConfig(cfg *envConfig) error {
+	if cfg.PrivKey == "" {
+		return fmt.Errorf("private_key is required")
 	}
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "info"
@@ -236,8 +222,6 @@ func checkConfig(cfg *config) error {
 	if !common.IsHexAddress(cfg.L1ContractAddr) || !common.IsHexAddress(cfg.SettlementContractAddr) {
 		return fmt.Errorf("both l1_contract_addr and settlement_contract_addr must be valid hex addresses")
 	}
-
-	// Create clients via url and cross check with expected chain id
 	l1Client, err := ethclient.Dial(cfg.L1RPCUrl)
 	if err != nil {
 		return fmt.Errorf("failed to create l1 client: %v", err)
@@ -249,7 +233,6 @@ func checkConfig(cfg *config) error {
 	if obtainedL1ChainID.Cmp(big.NewInt(int64(cfg.L1ChainID))) != 0 {
 		log.Fatal().Msgf("l1 chain id mismatch. Expected: %d, Obtained: %d", cfg.L1ChainID, obtainedL1ChainID)
 	}
-
 	settlementClient, err := ethclient.Dial(cfg.SettlementRPCUrl)
 	if err != nil {
 		return fmt.Errorf("failed to create settlement client: %v", err)
@@ -261,8 +244,17 @@ func checkConfig(cfg *config) error {
 	if obtainedSettlementChainID.Cmp(big.NewInt(int64(cfg.SettlementChainID))) != 0 {
 		log.Fatal().Msgf("settlement chain id mismatch. Expected: %d, Obtained: %d", cfg.SettlementChainID, obtainedSettlementChainID)
 	}
-
 	return nil
+}
+
+func setupLogging(logLevel string) {
+	lvl, err := zerolog.ParseLevel(logLevel)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to parse log level")
+	}
+	zerolog.SetGlobalLevel(lvl)
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 }
 
 func handlePendingTxes(
