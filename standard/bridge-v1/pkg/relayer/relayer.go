@@ -5,19 +5,23 @@ import (
 	"crypto/ecdsa"
 	"database/sql"
 	"errors"
-	"standard-bridge/pkg/shared"
+	"fmt"
+	"log/slog"
 	"time"
+
+	"standard-bridge/pkg/shared"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	l1g "github.com/primevprotocol/contracts-abi/clients/L1Gateway"
 	sg "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
-	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/sha3"
 )
 
 type Options struct {
+	Ctx                    context.Context
+	Logger                 *slog.Logger
 	PrivateKey             *ecdsa.PrivateKey
 	SettlementRPCUrl       string
 	L1RPCUrl               string
@@ -26,72 +30,76 @@ type Options struct {
 }
 
 type Relayer struct {
+	logger *slog.Logger
 	// Closes ctx's Done channel and waits for all goroutines to close.
 	waitOnCloseRoutines func()
 	db                  *sql.DB
 }
 
-func NewRelayer(opts *Options) *Relayer {
-	r := &Relayer{}
+func NewRelayer(opts *Options) (*Relayer, error) {
+	r := &Relayer{logger: opts.Logger}
 
 	pubKey := &opts.PrivateKey.PublicKey
 	pubKeyBytes := crypto.FromECDSAPub(pubKey)
 	hash := sha3.NewLegacyKeccak256()
 	hash.Write(pubKeyBytes[1:])
 	address := hash.Sum(nil)[12:]
-	valAddr := common.BytesToAddress(address)
 
-	log.Info().Msg("Relayer signing address: " + valAddr.Hex())
+	r.logger.Info("relayer signing address", "address", common.BytesToAddress(address).Hex())
 
 	l1Client, err := ethclient.Dial(opts.L1RPCUrl)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to dial l1 rpc")
+		return nil, fmt.Errorf("failed to dial l1 rpc: %w", err)
 	}
 
-	l1ChainID, err := l1Client.ChainID(context.Background())
+	l1ChainID, err := l1Client.ChainID(opts.Ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get l1 chain id")
+		return nil, fmt.Errorf("failed to get l1 chain id: %w", err)
 	}
-	log.Info().Msg("L1 chain id: " + l1ChainID.String())
+	r.logger.Info("L1 chain id", "chain_id", l1ChainID)
 
 	settlementClient, err := ethclient.Dial(opts.SettlementRPCUrl)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to dial settlement rpc")
+		return nil, fmt.Errorf("failed to dial settlement rpc: %w", err)
 	}
 
-	settlementChainID, err := settlementClient.ChainID(context.Background())
+	settlementChainID, err := settlementClient.ChainID(opts.Ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to dial settlement rpc")
+		return nil, fmt.Errorf("failed to dial settlement rpc: %w", err)
 	}
-	log.Info().Msg("Settlement chain id: " + settlementChainID.String())
-
-	ctx, cancel := context.WithCancel(context.Background())
+	r.logger.Info("settlement chain id", "chain_id", settlementChainID)
 
 	sFilterer, err := shared.NewSettlementFilterer(opts.SettlementContractAddr, settlementClient)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create settlement filterer")
+		return nil, fmt.Errorf("failed to create settlement filterer: %w", err)
 	}
-	sListener := NewListener(settlementClient, sFilterer, false)
+
+	ctx, cancel := context.WithCancel(opts.Ctx)
+	defer cancel()
+
+	sListener := NewListener(r.logger.With("component", "settlement_listener"), settlementClient, sFilterer, false)
 	sListenerClosed, settlementEventChan, err := sListener.Start(ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to start settlement listener")
+		return nil, fmt.Errorf("failed to start settlement listener: %w", err)
 	}
 
 	l1Filterer, err := shared.NewL1Filterer(opts.L1ContractAddr, l1Client)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create l1 filterer")
+		return nil, fmt.Errorf("failed to create l1 filterer: %w", err)
 	}
-	l1Listener := NewListener(l1Client, l1Filterer, true)
+
+	l1Listener := NewListener(r.logger.With("component", "l1_listener"), l1Client, l1Filterer, true)
 	l1ListenerClosed, l1EventChan, err := l1Listener.Start(ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to start l1 listener")
+		return nil, fmt.Errorf("failed to start l1 listener: %w", err)
 	}
 
 	st, err := sg.NewSettlementgatewayTransactor(opts.SettlementContractAddr, settlementClient)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create settlement gateway transactor")
+		return nil, fmt.Errorf("failed to create settlement gateway transactor: %w", err)
 	}
 	settlementTransactor := NewTransactor(
+		r.logger.With("component", "settlement_transactor"),
 		opts.PrivateKey,
 		opts.SettlementContractAddr,
 		settlementClient,
@@ -99,13 +107,17 @@ func NewRelayer(opts *Options) *Relayer {
 		sFilterer,
 		l1EventChan, // L1 transfer initiations result in settlement finalizations
 	)
-	stClosed := settlementTransactor.Start(ctx)
+	stClosed, err := settlementTransactor.Start(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	l1t, err := l1g.NewL1gatewayTransactor(opts.L1ContractAddr, l1Client)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create l1 gateway transactor")
+		return nil, fmt.Errorf("failed to create l1 gateway transactor: %w", err)
 	}
 	l1Transactor := NewTransactor(
+		r.logger.With("component", "l1_transactor"),
 		opts.PrivateKey,
 		opts.L1ContractAddr,
 		l1Client,
@@ -113,7 +125,10 @@ func NewRelayer(opts *Options) *Relayer {
 		l1Filterer,
 		settlementEventChan, // Settlement transfer initiations result in L1 finalizations
 	)
-	l1tClosed := l1Transactor.Start(ctx)
+	l1tClosed, err := l1Transactor.Start(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	r.waitOnCloseRoutines = func() {
 		// Close ctx's Done channel
@@ -129,12 +144,12 @@ func NewRelayer(opts *Options) *Relayer {
 		}()
 		<-allClosed
 	}
-	return r
+	return r, nil
 }
 
 // TryCloseAll attempts to close all workers and the database connection.
 func (r *Relayer) TryCloseAll() (err error) {
-	log.Debug().Msg("closing all workers and db connection")
+	r.logger.Debug("closing all workers and db connection")
 	defer func() {
 		if r.db == nil {
 			return
@@ -152,11 +167,11 @@ func (r *Relayer) TryCloseAll() (err error) {
 
 	select {
 	case <-workersClosed:
-		log.Info().Msg("all workers closed")
+		r.logger.Info("all workers closed")
 		return nil
 	case <-time.After(10 * time.Second):
 		msg := "failed to close all workers in 10 sec"
-		log.Error().Msg(msg)
+		r.logger.Error(msg)
 		return errors.New(msg)
 	}
 }

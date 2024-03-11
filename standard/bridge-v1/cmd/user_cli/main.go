@@ -3,19 +3,21 @@ package main
 import (
 	"context"
 	"crypto/ecdsa"
+	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"os"
-	"standard-bridge/pkg/shared"
-	transfer "standard-bridge/pkg/transfer"
 	"strconv"
 	"strings"
+
+	"standard-bridge/pkg/shared"
+	"standard-bridge/pkg/transfer"
+	"standard-bridge/pkg/util"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
 )
 
@@ -43,9 +45,7 @@ func main() {
 						Usage: "Automatically cancel existing pending transactions",
 					},
 				},
-				Action: func(c *cli.Context) error {
-					return bridgeToSettlement(c)
-				},
+				Action: bridgeToSettlement,
 			},
 			{
 				Name:  "bridge-to-l1",
@@ -66,9 +66,7 @@ func main() {
 						Usage: "Automatically cancel existing pending transactions",
 					},
 				},
-				Action: func(c *cli.Context) error {
-					return bridgeToL1(c)
-				},
+				Action: bridgeToL1,
 			},
 		},
 	}
@@ -77,11 +75,41 @@ func main() {
 	}
 }
 
+func loadConfig() (*envConfig, error) {
+	cfg, err := loadConfigFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+	if err := checkEnvConfig(cfg); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	return cfg, nil
+}
+
 func bridgeToSettlement(c *cli.Context) error {
-	config := preTransfer(c)
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	logger, err := util.NewLogger(cfg.LogLevel, "text", "", os.Stdout)
+	if err != nil {
+		return err
+	}
+	config, err := preTransfer(c, cfg)
+	if err != nil {
+		return err
+	}
 	autoCancel := c.Bool("cancel-pending")
-	handlePendingTxes(context.Background(), config.PrivateKey, config.L1RPCUrl, autoCancel)
+	ok, err := handlePendingTxes(c.Context, logger.With("component", "l1_eth_client"), config.PrivateKey, config.L1RPCUrl, autoCancel)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		logger.Info("user chose not to cancel pending transactions, exiting...")
+		return nil
+	}
 	t, err := transfer.NewTransferToSettlement(
+		logger.With("component", "settlement_transfer"),
 		config.Amount,
 		config.DestAddress,
 		config.PrivateKey,
@@ -91,20 +119,39 @@ func bridgeToSettlement(c *cli.Context) error {
 		config.SettlementContractAddr,
 	)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create transfer to settlement")
+		return fmt.Errorf("failed to create transfer to settlement: %w", err)
 	}
-	err = t.Start(context.Background())
+	err = t.Start(c.Context)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to start transfer to settlement")
+		return fmt.Errorf("failed to start transfer to settlement: %w", err)
 	}
 	return nil
 }
 
 func bridgeToL1(c *cli.Context) error {
-	config := preTransfer(c)
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	logger, err := util.NewLogger(cfg.LogLevel, "text", "", os.Stdout)
+	if err != nil {
+		return err
+	}
+	config, err := preTransfer(c, cfg)
+	if err != nil {
+		return err
+	}
 	autoCancel := c.Bool("cancel-pending")
-	handlePendingTxes(context.Background(), config.PrivateKey, config.SettlementRPCUrl, autoCancel)
+	ok, err := handlePendingTxes(c.Context, logger.With("component", "settlement_eth_client"), config.PrivateKey, config.SettlementRPCUrl, autoCancel)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		logger.Info("user chose not to cancel pending transactions, exiting...")
+		return nil
+	}
 	t, err := transfer.NewTransferToL1(
+		logger.With("component", "l1_transfer"),
 		config.Amount,
 		config.DestAddress,
 		config.PrivateKey,
@@ -114,11 +161,11 @@ func bridgeToL1(c *cli.Context) error {
 		config.SettlementContractAddr,
 	)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create transfer to L1")
+		return fmt.Errorf("failed to create transfer to L1: %w", err)
 	}
-	err = t.Start(context.Background())
+	err = t.Start(c.Context)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to start transfer to L1")
+		return fmt.Errorf("failed to start transfer to L1: %w", err)
 	}
 	return nil
 }
@@ -133,31 +180,24 @@ type preTransferConfig struct {
 	SettlementContractAddr common.Address
 }
 
-func preTransfer(c *cli.Context) preTransferConfig {
-	cfg := loadConfigFromEnv()
-
-	if err := checkEnvConfig(&cfg); err != nil {
-		log.Fatal().Err(err).Msg("invalid config")
-	}
-	setupLogging(cfg.LogLevel)
-
+func preTransfer(c *cli.Context, cfg *envConfig) (*preTransferConfig, error) {
 	privKeyTrimmed := strings.TrimPrefix(cfg.PrivKey, "0x")
 	privKey, err := crypto.HexToECDSA(privKeyTrimmed)
 	if err != nil {
-		log.Err(err).Msg("failed to load private key")
+		return nil, errors.New("failed to load private key")
 	}
 
 	amount := c.Int("amount")
 	if amount <= 0 {
-		log.Fatal().Msg("amount must be greater than 0")
+		return nil, errors.New("amount must be greater than 0")
 	}
 
 	destAddr := c.String("dest-addr")
 	if !common.IsHexAddress(destAddr) {
-		log.Fatal().Msg("dest-addr must be a valid hex address")
+		return nil, errors.New("dest-addr must be a valid hex address")
 	}
 
-	return preTransferConfig{
+	return &preTransferConfig{
 		Amount:                 big.NewInt(int64(amount)),
 		DestAddress:            common.HexToAddress(destAddr),
 		PrivateKey:             privKey,
@@ -165,7 +205,7 @@ func preTransfer(c *cli.Context) preTransferConfig {
 		L1RPCUrl:               cfg.L1RPCUrl,
 		L1ContractAddr:         common.HexToAddress(cfg.L1ContractAddr),
 		SettlementContractAddr: common.HexToAddress(cfg.SettlementContractAddr),
-	}
+	}, nil
 }
 
 type envConfig struct {
@@ -179,18 +219,18 @@ type envConfig struct {
 	SettlementContractAddr string
 }
 
-func loadConfigFromEnv() envConfig {
+func loadConfigFromEnv() (*envConfig, error) {
 	l1ChainID := os.Getenv("L1_CHAIN_ID")
 	l1ChainIDInt, err := strconv.Atoi(l1ChainID)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to convert L1_CHAIN_ID to int")
+		return nil, fmt.Errorf("failed to convert L1_CHAIN_ID to int: %w", err)
 	}
 	settlementChainID := os.Getenv("SETTLEMENT_CHAIN_ID")
 	settlementChainIDInt, err := strconv.Atoi(settlementChainID)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to convert SETTLEMENT_CHAIN_ID to int")
+		return nil, fmt.Errorf("failed to convert SETTLEMENT_CHAIN_ID to int: %w", err)
 	}
-	cfg := envConfig{
+	return &envConfig{
 		PrivKey:                os.Getenv("PRIVATE_KEY"),
 		LogLevel:               os.Getenv("LOG_LEVEL"),
 		L1RPCUrl:               os.Getenv("L1_RPC_URL"),
@@ -199,8 +239,7 @@ func loadConfigFromEnv() envConfig {
 		SettlementChainID:      settlementChainIDInt,
 		L1ContractAddr:         os.Getenv("L1_CONTRACT_ADDR"),
 		SettlementContractAddr: os.Getenv("SETTLEMENT_CONTRACT_ADDR"),
-	}
-	return cfg
+	}, nil
 }
 
 func checkEnvConfig(cfg *envConfig) error {
@@ -231,7 +270,7 @@ func checkEnvConfig(cfg *envConfig) error {
 		return fmt.Errorf("failed to get l1 chain id: %v", err)
 	}
 	if obtainedL1ChainID.Cmp(big.NewInt(int64(cfg.L1ChainID))) != 0 {
-		log.Fatal().Msgf("l1 chain id mismatch. Expected: %d, Obtained: %d", cfg.L1ChainID, obtainedL1ChainID)
+		return fmt.Errorf("l1 chain id mismatch. Expected: %d, Obtained: %d", cfg.L1ChainID, obtainedL1ChainID)
 	}
 	settlementClient, err := ethclient.Dial(cfg.SettlementRPCUrl)
 	if err != nil {
@@ -242,53 +281,47 @@ func checkEnvConfig(cfg *envConfig) error {
 		return fmt.Errorf("failed to get settlement chain id: %v", err)
 	}
 	if obtainedSettlementChainID.Cmp(big.NewInt(int64(cfg.SettlementChainID))) != 0 {
-		log.Fatal().Msgf("settlement chain id mismatch. Expected: %d, Obtained: %d", cfg.SettlementChainID, obtainedSettlementChainID)
+		return fmt.Errorf("settlement chain id mismatch. Expected: %d, Obtained: %d", cfg.SettlementChainID, obtainedSettlementChainID)
 	}
 	return nil
 }
 
-func setupLogging(logLevel string) {
-	lvl, err := zerolog.ParseLevel(logLevel)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to parse log level")
-	}
-	zerolog.SetGlobalLevel(lvl)
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
-}
-
 func handlePendingTxes(
 	ctx context.Context,
+	logger *slog.Logger,
 	privateKey *ecdsa.PrivateKey,
 	url string,
 	autoCancel bool,
-) {
-	ethClient, err := ethclient.Dial(url)
+) (bool, error) {
+	rawClient, err := ethclient.Dial(url)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to connect to eth client")
+		return false, fmt.Errorf("failed to connect to eth client: %w", err)
 	}
-	exist, err := shared.PendingTransactionsExist(ctx, privateKey, ethClient)
+	ethClient := shared.NewETHClient(logger, rawClient)
+
+	exist, err := ethClient.PendingTransactionsExist(ctx, privateKey)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to check pending transactions")
+		return false, fmt.Errorf("failed to check pending transactions: %w", err)
 	}
 	if !exist {
-		log.Info().Msg("No pending transactions exist for signing account.")
-		return
+		return false, nil
 	}
 	if autoCancel {
-		log.Info().Msg("Automatically cancelling existing pending transactions.")
-		shared.CancelPendingTxes(ctx, privateKey, ethClient)
-		return
+		if err := ethClient.CancelPendingTxes(ctx, privateKey); err != nil {
+			return false, fmt.Errorf("fail to cancel pending transaction(s): %w", err)
+		}
 	}
 	fmt.Println("Pending transactions exist for signing account. Do you want to cancel them? (y/n)")
 	var response string
 	_, err = fmt.Scanln(&response)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to read user input")
+		return false, fmt.Errorf("failed to read user input: %w", err)
 	}
 	if strings.ToLower(response) == "y" {
-		shared.CancelPendingTxes(ctx, privateKey, ethClient)
-		return
+		if err := ethClient.CancelPendingTxes(ctx, privateKey); err != nil {
+			return false, fmt.Errorf("fail to cancel pending transaction(s): %w", err)
+		}
+		return true, nil
 	}
-	log.Fatal().Msg("User chose not to cancel pending transactions. Exiting.")
+	return false, nil
 }

@@ -3,23 +3,22 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
+	"log/slog"
 	"math/big"
 	mathrand "math/rand"
-
 	"os"
 	"time"
 
-	"github.com/rs/zerolog/log"
-
 	"standard-bridge/pkg/shared"
-	transfer "standard-bridge/pkg/transfer"
+	"standard-bridge/pkg/transfer"
+	"standard-bridge/pkg/util"
 
+	"github.com/DataDog/datadog-api-client-go/api/v2/datadog"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/params"
-
-	datadog "github.com/DataDog/datadog-api-client-go/api/v2/datadog"
 )
 
 const (
@@ -30,22 +29,31 @@ const (
 )
 
 func main() {
+	logger, err := util.NewLogger(slog.LevelDebug.String(), "text", "", os.Stdout)
+	if err != nil {
+		fmt.Printf("failed to create logger: %v\n", err)
+		os.Exit(1)
+	}
 
 	privateKeyString := os.Getenv("PRIVATE_KEY")
 	if privateKeyString == "" {
-		log.Fatal().Msg("PRIVATE_KEY env var is required")
+		logger.Error("PRIVATE_KEY env var is required")
+		os.Exit(1)
 	}
 	privateKey, err := crypto.HexToECDSA(privateKeyString)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to parse private key")
+		logger.Error("failed to parse private key")
+		os.Exit(1)
 	}
 
 	transferAddressString := os.Getenv("ACCOUNT_ADDR")
 	if transferAddressString == "" {
-		log.Fatal().Msg("ACCOUNT_ADDR env var is required")
+		logger.Error("ACCOUNT_ADDR env var is required")
+		os.Exit(1)
 	}
 	if !common.IsHexAddress(transferAddressString) {
-		log.Fatal().Msg("ACCOUNT_ADDR is not a valid address")
+		logger.Error("ACCOUNT_ADDR is not a valid address")
+		os.Exit(1)
 	}
 	transferAddr := common.HexToAddress(transferAddressString)
 
@@ -68,21 +76,30 @@ func main() {
 	// Construct two eth clients and cancel all pending txes on both chains
 	l1Client, err := ethclient.Dial(l1RPCUrl)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to dial l1 rpc")
+		logger.Error("failed to dial l1 rpc", "error", err)
+		os.Exit(1)
 	}
 	settlementClient, err := ethclient.Dial(settlementRPCUrl)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to dial settlement rpc")
+		logger.Error("failed to dial settlement rpc", "error", err)
+		os.Exit(1)
 	}
-	shared.CancelPendingTxes(ctx, privateKey, l1Client)
-	shared.CancelPendingTxes(ctx, privateKey, settlementClient)
+	if err := shared.NewETHClient(logger.With("component", "l1_eth_client"), l1Client).CancelPendingTxes(ctx, privateKey); err != nil {
+		logger.Error("failed to cancel pending L1 transactions")
+		os.Exit(1)
+	}
+	if err := shared.NewETHClient(logger.With("component", "settlement_eth_client"), settlementClient).CancelPendingTxes(ctx, privateKey); err != nil {
+		logger.Error("failed to cancel pending settlement transactions")
+		os.Exit(1)
+	}
 
 	for {
 		// Generate a random amount of wei in [0.01, 10] ETH
 		maxWei := new(big.Int).Mul(big.NewInt(10), big.NewInt(params.Ether))
 		randWeiValue, err := rand.Int(rand.Reader, maxWei)
 		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to generate random value")
+			logger.Error("failed to generate random value", "error", err)
+			os.Exit(1)
 		}
 		if randWeiValue.Cmp(big.NewInt(params.Ether/100)) < 0 {
 			// Enforce minimum value of 0.01 ETH
@@ -93,6 +110,7 @@ func main() {
 
 		// Create and start the transfer to the settlement chain
 		tSettlement, err := transfer.NewTransferToSettlement(
+			logger.With("component", "settlement_transfer"),
 			randWeiValue,
 			transferAddr,
 			privateKey,
@@ -102,25 +120,28 @@ func main() {
 			settlementContractAddr,
 		)
 		if err != nil {
-			postMetricToDatadog(ctx, apiClient, "bridging.failure", 0,
-				[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"},
-			)
+			tags := []string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"}
+			if err := postMetricToDatadog(ctx, apiClient, "bridging.failure", 0, tags); err != nil {
+				logger.Error("failed to post metric", "error", err)
+			}
 			time.Sleep(time.Minute)
 			continue
 		}
 		startTime := time.Now()
 		err = tSettlement.Start(ctx)
 		if err != nil {
-			postMetricToDatadog(ctx, apiClient, "bridging.failure", time.Since(startTime).Seconds(),
-				[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"},
-			)
+			tags := []string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"}
+			if err := postMetricToDatadog(ctx, apiClient, "bridging.failure", time.Since(startTime).Seconds(), tags); err != nil {
+				logger.Error("failed to post metric", "error", err)
+			}
 			time.Sleep(time.Minute)
 			continue
 		}
 		completionTimeSec := time.Since(startTime).Seconds()
-		postMetricToDatadog(ctx, apiClient, "bridging.success", completionTimeSec,
-			[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"},
-		)
+		tags := []string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "17864"}
+		if err := postMetricToDatadog(ctx, apiClient, "bridging.success", completionTimeSec, tags); err != nil {
+			logger.Error("failed to post metric", "error", err)
+		}
 
 		// Sleep for random interval between 0 and 5 seconds
 		time.Sleep(time.Duration(mathrand.Intn(6)) * time.Second)
@@ -131,6 +152,7 @@ func main() {
 
 		// Create and start the transfer back to L1 with the same amount
 		tL1, err := transfer.NewTransferToL1(
+			logger.With("component", "l1_transfer"),
 			amountBack,
 			transferAddr,
 			privateKey,
@@ -140,32 +162,35 @@ func main() {
 			settlementContractAddr,
 		)
 		if err != nil {
-			postMetricToDatadog(ctx, apiClient, "bridging.failure", 0,
-				[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "39999"},
-			)
+			tags := []string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "39999"}
+			if err := postMetricToDatadog(ctx, apiClient, "bridging.failure", 0, tags); err != nil {
+				logger.Error("failed to post metric", "error", err)
+			}
 			time.Sleep(time.Minute)
 			continue
 		}
 		startTime = time.Now()
 		err = tL1.Start(ctx)
 		if err != nil {
-			postMetricToDatadog(ctx, apiClient, "bridging.failure", time.Since(startTime).Seconds(),
-				[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "39999"},
-			)
+			tags := []string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "39999"}
+			if err := postMetricToDatadog(ctx, apiClient, "bridging.failure", time.Since(startTime).Seconds(), tags); err != nil {
+				logger.Error("failed to post metric", "error", err)
+			}
 			time.Sleep(time.Minute)
 			continue
 		}
 		completionTimeSec = time.Since(startTime).Seconds()
-		postMetricToDatadog(ctx, apiClient, "bridging.success", completionTimeSec,
-			[]string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "39999"},
-		)
+		tags = []string{"environment:bridge_test", "account_addr:" + transferAddressString, "to_chain_id:" + "39999"}
+		if err := postMetricToDatadog(ctx, apiClient, "bridging.success", completionTimeSec, tags); err != nil {
+			logger.Error("failed to post metric", "error", err)
+		}
 
 		// Sleep for random interval between 0 and 5 seconds
 		time.Sleep(time.Duration(mathrand.Intn(6)) * time.Second)
 	}
 }
 
-func postMetricToDatadog(ctx context.Context, client *datadog.APIClient, metricName string, value float64, tags []string) {
+func postMetricToDatadog(ctx context.Context, client *datadog.APIClient, metricName string, value float64, tags []string) error {
 	now := time.Now().Unix()
 	point := datadog.MetricPoint{
 		Timestamp: datadog.PtrInt64(now),
@@ -181,8 +206,5 @@ func postMetricToDatadog(ctx context.Context, client *datadog.APIClient, metricN
 		Series: []datadog.MetricSeries{series},
 	}
 	_, _, err := client.MetricsApi.SubmitMetrics(ctx, payload)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to post metric to Datadog")
-	}
-	log.Debug().Msgf("Posted metric %s with value %f and tags %v", metricName, value, tags)
+	return err
 }
