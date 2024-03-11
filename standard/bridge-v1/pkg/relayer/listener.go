@@ -3,15 +3,17 @@ package relayer
 import (
 	"context"
 	"fmt"
-	"standard-bridge/pkg/shared"
+	"log/slog"
 	"time"
+
+	"standard-bridge/pkg/shared"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/rs/zerolog/log"
 )
 
 type Listener struct {
+	logger          *slog.Logger
 	rawClient       *ethclient.Client
 	gatewayFilterer shared.GatewayFilterer
 	sync            bool
@@ -21,44 +23,46 @@ type Listener struct {
 }
 
 func NewListener(
+	logger *slog.Logger,
 	client *ethclient.Client,
 	gatewayFilterer shared.GatewayFilterer,
 	sync bool,
 ) *Listener {
 	return &Listener{
+		logger:          logger,
 		rawClient:       client,
 		gatewayFilterer: gatewayFilterer,
 		sync:            true,
 	}
 }
 
-func (listener *Listener) Start(ctx context.Context) (
+func (l *Listener) Start(ctx context.Context) (
 	<-chan struct{}, <-chan shared.TransferInitiatedEvent, error,
 ) {
-	chainID, err := listener.rawClient.ChainID(ctx)
+	chainID, err := l.rawClient.ChainID(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get chain id: %w", err)
 	}
 	switch chainID.String() {
 	case "39999":
-		log.Info().Msg("Starting listener for local_l1")
-		listener.chain = shared.L1
+		l.logger.Info("starting listener for local_l1")
+		l.chain = shared.L1
 	case "17000":
-		log.Info().Msg("Starting listener for Holesky L1")
-		listener.chain = shared.L1
+		l.logger.Info("starting listener for Holesky L1")
+		l.chain = shared.L1
 	case "17864":
-		log.Info().Msg("Starting listener for mev-commit chain (settlement)")
-		listener.chain = shared.Settlement
+		l.logger.Info("starting listener for mev-commit chain (settlement)")
+		l.chain = shared.Settlement
 	default:
 		return nil, nil, fmt.Errorf("unsupported chain id: %s", chainID.String())
 	}
 
-	listener.DoneChan = make(chan struct{})
-	listener.EventChan = make(chan shared.TransferInitiatedEvent, 10) // Buffer up to 10 events
+	l.DoneChan = make(chan struct{})
+	l.EventChan = make(chan shared.TransferInitiatedEvent, 10) // Buffer up to 10 events
 
 	go func() {
-		defer close(listener.DoneChan)
-		defer close(listener.EventChan)
+		defer close(l.DoneChan)
+		defer close(l.EventChan)
 
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -66,64 +70,75 @@ func (listener *Listener) Start(ctx context.Context) (
 		// Blocks up to this value have been handled
 		blockNumHandled := uint64(0)
 
-		if listener.sync {
-			blockNumHandled, err = listener.obtainFinalizedBlockNum(ctx)
+		if l.sync {
+			blockNumHandled, err = l.obtainFinalizedBlockNum(ctx)
 			if err != nil {
-				log.Fatal().Err(err).Msg("failed to obtain block number during sync")
+				l.logger.Error("failed to obtain block number during sync", "error", err)
+				return
 			}
 			// Most nodes limit query ranges so we fetch in 40k increments
-			events, err := listener.obtainTransferInitiatedEventsInBatches(
+			events, err := l.obtainTransferInitiatedEventsInBatches(
 				ctx, 0, blockNumHandled)
 			if err != nil {
-				log.Fatal().Err(err).Msg("failed to fetch transfer initiated events during sync")
+				l.logger.Error("failed to fetch transfer initiated events during sync", "error", err)
+				return
 			}
 			for _, event := range events {
-				log.Info().Msgf("Transfer initiated event seen by listener during sync: %+v", event)
-				listener.EventChan <- event
+				l.logger.Info("transfer initiated event seen by listener during sync", "event", event)
+				l.EventChan <- event
 			}
 		}
 
 		for {
 			select {
 			case <-ctx.Done():
-				log.Info().Msgf("Listener for %s shutting down", listener.chain)
+				l.logger.Info("listener shutting down", "chain", l.chain)
 				return
 			case <-ticker.C:
 			}
 
-			currentBlockNum, err := listener.obtainFinalizedBlockNum(ctx)
+			currentBlockNum, err := l.obtainFinalizedBlockNum(ctx)
 			if err != nil {
 				// TODO: Secondary url if rpc fails. For now just start over...
-				log.Error().Err(err).Msg("failed to obtain block number")
-				log.Warn().Msg("Listener restarting from block 0...")
+				l.logger.Error("failed to obtain block number", "error", err)
+				l.logger.Warn("listener restarting from block 0...")
 				blockNumHandled = 0
 				continue
 			}
 			if blockNumHandled < currentBlockNum {
-				events, err := listener.obtainTransferInitiatedEventsInBatches(ctx, blockNumHandled+1, currentBlockNum)
+				events, err := l.obtainTransferInitiatedEventsInBatches(ctx, blockNumHandled+1, currentBlockNum)
 				if err != nil {
 					// TODO: Secondary url if rpc fails. For now just start over...
-					log.Error().Err(err).Msgf("failed to query transfer initiated events from block %d to %d on %s",
-						blockNumHandled+1, currentBlockNum, listener.chain.String())
-					log.Warn().Msg("Listener restarting from block 0...")
+					l.logger.Error(
+						"failed to query transfer initiated events",
+						"from_block", blockNumHandled+1,
+						"to_block", currentBlockNum,
+						"chain", l.chain,
+					)
+					l.logger.Warn("listener restarting from block 0...")
 					blockNumHandled = 0
 					continue
 				}
-				log.Debug().Msgf("Fetched %d events from block %d to %d on %s",
-					len(events), blockNumHandled+1, currentBlockNum, listener.chain.String())
+				l.logger.Debug(
+					"fetched events",
+					"event_count", len(events),
+					"from_block", blockNumHandled+1,
+					"to_block", currentBlockNum,
+					"chain", l.chain,
+				)
 				for _, event := range events {
-					log.Info().Msgf("Transfer initiated event seen by listener: %+v", event)
-					listener.EventChan <- event
+					l.logger.Info("transfer initiated event seen by listener", "event", event)
+					l.EventChan <- event
 				}
 				blockNumHandled = currentBlockNum
 			}
 		}
 	}()
-	return listener.DoneChan, listener.EventChan, nil
+	return l.DoneChan, l.EventChan, nil
 }
 
-func (listener *Listener) obtainFinalizedBlockNum(ctx context.Context) (uint64, error) {
-	blockNum, err := listener.rawClient.BlockNumber(ctx)
+func (l *Listener) obtainFinalizedBlockNum(ctx context.Context) (uint64, error) {
+	blockNum, err := l.rawClient.BlockNumber(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to obtain block number: %w", err)
 	}
@@ -135,7 +150,7 @@ func (listener *Listener) obtainFinalizedBlockNum(ctx context.Context) (uint64, 
 	return blockNum - 2*epochBlocks, nil
 }
 
-func (listener *Listener) obtainTransferInitiatedEventsInBatches(
+func (l *Listener) obtainTransferInitiatedEventsInBatches(
 	ctx context.Context,
 	startBlock,
 	endBlock uint64,
@@ -148,7 +163,7 @@ func (listener *Listener) obtainTransferInitiatedEventsInBatches(
 			end = endBlock
 		}
 		opts := &bind.FilterOpts{Start: start, End: &end, Context: ctx}
-		events, err := listener.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
+		events, err := l.gatewayFilterer.ObtainTransferInitiatedEvents(opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to obtain transfer initiated events: %w", err)
 		}

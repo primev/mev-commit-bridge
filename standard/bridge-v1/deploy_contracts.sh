@@ -1,7 +1,7 @@
 #!/bin/sh
 
 L1_CHAIN_ID=${L1_CHAIN_ID:-"17000"} # Holesky
-L1_RPC_URL=${L1_RPC_URL:-"https://ethereum-holesky.publicnode.com"}
+STANDARD_BRIDGE_RELAYER_L1_RPC_URL=${STANDARD_BRIDGE_RELAYER_L1_RPC_URL:-"https://ethereum-holesky.publicnode.com"}
 SETTLEMENT_CHAIN_ID=${SETTLEMENT_CHAIN_ID:-"17864"}
 SETTLEMENT_DEPLOYER_PRIVKEY=${DEPLOYER_PRIVKEY:-"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"} # Same default deployer as core contracts
 
@@ -27,11 +27,11 @@ ARTIFACT_OUT_PATH=$(realpath "$ARTIFACT_OUT_PATH")
 
 fail_if_not_set() {
     if [ -z "$1" ]; then
-        echo "Error: Required environment variable not set (one of SETTLEMENT_RPC_URL, RELAYER_PRIVKEY)"
+        echo "Error: Required environment variable not set (one of STANDARD_BRIDGE_RELAYER_SETTLEMENT_RPC_URL, RELAYER_PRIVKEY)"
         exit 1
     fi
 }
-fail_if_not_set "${SETTLEMENT_RPC_URL}"
+fail_if_not_set "${STANDARD_BRIDGE_RELAYER_SETTLEMENT_RPC_URL}"
 fail_if_not_set "${RELAYER_PRIVKEY}"
 
 RELAYER_ADDR=$("$CAST_BIN_PATH" wallet address "$RELAYER_PRIVKEY")
@@ -75,43 +75,43 @@ check_balance() {
     fi
 }
 
-check_chain_id "$L1_RPC_URL" "$L1_CHAIN_ID"
-check_chain_id "$SETTLEMENT_RPC_URL" "$SETTLEMENT_CHAIN_ID"
+check_chain_id "$STANDARD_BRIDGE_RELAYER_L1_RPC_URL" "$L1_CHAIN_ID"
+check_chain_id "$STANDARD_BRIDGE_RELAYER_SETTLEMENT_RPC_URL" "$SETTLEMENT_CHAIN_ID"
 
-check_create2 "$L1_RPC_URL"
-check_create2 "$SETTLEMENT_RPC_URL"
+check_create2 "$STANDARD_BRIDGE_RELAYER_L1_RPC_URL"
+check_create2 "$STANDARD_BRIDGE_RELAYER_SETTLEMENT_RPC_URL"
 
 SETTLEMENT_DEPLOYER_ADDR=$("$CAST_BIN_PATH" wallet address "$SETTLEMENT_DEPLOYER_PRIVKEY")
-check_balance "$SETTLEMENT_RPC_URL" "$SETTLEMENT_DEPLOYER_ADDR"
+check_balance "$STANDARD_BRIDGE_RELAYER_SETTLEMENT_RPC_URL" "$SETTLEMENT_DEPLOYER_ADDR"
 
 "$CAST_BIN_PATH" send \
-    --rpc-url "$SETTLEMENT_RPC_URL" \
+    --rpc-url "$STANDARD_BRIDGE_RELAYER_SETTLEMENT_RPC_URL" \
     --private-key "$SETTLEMENT_DEPLOYER_PRIVKEY" \
     "$RELAYER_ADDR" \
     --value 100ether
 
-check_balance "$SETTLEMENT_RPC_URL" "$RELAYER_ADDR"
-check_balance "$L1_RPC_URL" "$RELAYER_ADDR"
+check_balance "$STANDARD_BRIDGE_RELAYER_SETTLEMENT_RPC_URL" "$RELAYER_ADDR"
+check_balance "$STANDARD_BRIDGE_RELAYER_L1_RPC_URL" "$RELAYER_ADDR"
 
 # Create/fund a new L1 deployer to avoid L1Gateway contract addr collision on Holeksy
 L1_DEPLOYER_PRIVKEY=$($CAST_BIN_PATH wallet new | grep 'Private key' | awk '{ print $NF }')
 L1_DEPLOYER_ADDR=$($CAST_BIN_PATH wallet address "$L1_DEPLOYER_PRIVKEY")
 echo "New L1 deployer to be funded by relayer: $L1_DEPLOYER_ADDR"
 $CAST_BIN_PATH send \
-    --rpc-url "$L1_RPC_URL" \
+    --rpc-url "$STANDARD_BRIDGE_RELAYER_L1_RPC_URL" \
     --private-key "$RELAYER_PRIVKEY" \
     "$L1_DEPLOYER_ADDR" \
     --value 0.5ether
 
 EXPECTED_WHITELIST_ADDR="0x57508f0B0f3426758F1f3D63ad4935a7c9383620"
-check_balance "$SETTLEMENT_RPC_URL" "$EXPECTED_WHITELIST_ADDR"
+check_balance "$STANDARD_BRIDGE_RELAYER_SETTLEMENT_RPC_URL" "$EXPECTED_WHITELIST_ADDR"
 
 echo "changing directory to $CONTRACTS_PATH and running deploy scripts for standard bridge"
 cd "$CONTRACTS_PATH" || exit
 
 RELAYER_ADDR="$RELAYER_ADDR" $FORGE_BIN_PATH script \
     "scripts/DeployStandardBridge.s.sol:DeploySettlementGateway" \
-    --rpc-url "$SETTLEMENT_RPC_URL" \
+    --rpc-url "$STANDARD_BRIDGE_RELAYER_SETTLEMENT_RPC_URL" \
     --private-key "$SETTLEMENT_DEPLOYER_PRIVKEY" \
     --broadcast \
     --chain-id "$SETTLEMENT_CHAIN_ID" \
@@ -123,7 +123,7 @@ mv SettlementGatewayArtifact.json "$ARTIFACT_OUT_PATH"
 
 RELAYER_ADDR="$RELAYER_ADDR" $FORGE_BIN_PATH script \
     "scripts/DeployStandardBridge.s.sol:DeployL1Gateway" \
-    --rpc-url "$L1_RPC_URL" \
+    --rpc-url "$STANDARD_BRIDGE_RELAYER_L1_RPC_URL" \
     --private-key "$L1_DEPLOYER_PRIVKEY" \
     --broadcast \
     --chain-id "$L1_CHAIN_ID" \
