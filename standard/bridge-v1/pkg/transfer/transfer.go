@@ -122,14 +122,14 @@ func NewTransferToL1(
 		destAddress: destAddress,
 		privateKey:  privateKey,
 		srcClient: shared.NewETHClient(
-			logger.With("component", "l1_eth_client"),
+			logger.With("component", "settlement_eth_client"),
 			commonSetup.settlementClient,
 		),
 		srcChainID:    commonSetup.settlementChainID,
 		srcTransactor: st,
 		srcFilterer:   sf,
 		destClient: shared.NewETHClient(
-			logger.With("component", "settlement_eth_client"),
+			logger.With("component", "l1_eth_client"),
 			commonSetup.l1Client,
 		),
 		destFilterer: l1f,
