@@ -26,12 +26,6 @@ const (
 )
 
 var (
-	optionConfig = &cli.StringFlag{
-		Name:    "config",
-		Usage:   "path to relayer config file",
-		EnvVars: []string{"STANDARD_BRIDGE_RELAYER_CONFIG"},
-	}
-
 	optionPrivKeyFile = altsrc.NewStringFlag(&cli.StringFlag{
 		Name:    "priv-key-file",
 		Usage:   "path to private key file",
@@ -101,13 +95,12 @@ var (
 	optionSettlementContractAddr = altsrc.NewStringFlag(&cli.StringFlag{
 		Name:    "settlement-contract-addr",
 		Usage:   "address of the settlement gateway contract",
-		EnvVars: []string{"STANDARD_BRIDGE_RELAYER_PRECONF_CONTRACT_ADDR"},
+		EnvVars: []string{"STANDARD_BRIDGE_RELAYER_SETTLEMENT_CONTRACT_ADDR"},
 	})
 )
 
 func main() {
 	flags := []cli.Flag{
-		optionConfig,
 		optionPrivKeyFile,
 		optionLogFmt,
 		optionLogLevel,
@@ -124,7 +117,6 @@ func main() {
 		Commands: []*cli.Command{{
 			Name:   "start",
 			Usage:  "Start standard bridge relayer",
-			Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewYamlSourceFromFlagFunc(optionConfig.Name)),
 			Flags:  flags,
 			Action: start,
 		}},

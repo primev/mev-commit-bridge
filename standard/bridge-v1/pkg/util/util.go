@@ -37,12 +37,14 @@ func NewLogger(lvl, logFmt, tags string, sink io.Writer) (*slog.Logger, error) {
 	}
 
 	var args []any
-	for i, p := range strings.Split(tags, ",") {
-		kv := strings.Split(p, ":")
-		if len(kv) != 2 {
-			return nil, fmt.Errorf("invalid tag at index %d", i)
+	if tags != "" {
+		for i, p := range strings.Split(tags, ",") {
+			kv := strings.Split(p, ":")
+			if len(kv) != 2 {
+				return nil, fmt.Errorf("invalid tag at index %d", i)
+			}
+			args = append(args, strings.ToValidUTF8(kv[0], "�"), strings.ToValidUTF8(kv[1], "�"))
 		}
-		args = append(args, strings.ToValidUTF8(kv[0], "�"), strings.ToValidUTF8(kv[1], "�"))
 	}
 
 	return slog.New(handler).With(args...), nil
