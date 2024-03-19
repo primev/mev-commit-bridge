@@ -4,39 +4,42 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"log/slog"
 	"math"
 	"math/big"
-	shared "standard-bridge/pkg/shared"
 	"time"
 
-	gethtypes "github.com/ethereum/go-ethereum/core/types"
-	l1g "github.com/primevprotocol/contracts-abi/clients/L1Gateway"
-	sg "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
+	"standard-bridge/pkg/shared"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/rs/zerolog/log"
+	l1g "github.com/primevprotocol/contracts-abi/clients/L1Gateway"
+	sg "github.com/primevprotocol/contracts-abi/clients/SettlementGateway"
 	"golang.org/x/crypto/sha3"
 )
 
 type Transfer struct {
+	logger *slog.Logger
+
 	amount      *big.Int
 	destAddress common.Address
 	privateKey  *ecdsa.PrivateKey
 
-	srcClient     *ethclient.Client
+	srcClient     *shared.ETHClient
 	srcChainID    *big.Int
 	srcTransactor shared.GatewayTransactor
 	srcFilterer   shared.GatewayFilterer
 
-	destClient   *ethclient.Client
+	destClient   *shared.ETHClient
 	destFilterer shared.GatewayFilterer
 	destChainID  *big.Int
 }
 
 func NewTransferToSettlement(
+	logger *slog.Logger,
 	amount *big.Int,
 	destAddress common.Address,
 	privateKey *ecdsa.PrivateKey,
@@ -45,8 +48,8 @@ func NewTransferToSettlement(
 	l1ContractAddr common.Address,
 	settlementContractAddr common.Address,
 ) (*Transfer, error) {
+	t := &Transfer{logger: logger}
 
-	t := &Transfer{}
 	commonSetup, err := t.getCommonSetup(privateKey, settlementRPCUrl, l1RPCUrl)
 	if err != nil {
 		return nil, err
@@ -66,20 +69,28 @@ func NewTransferToSettlement(
 	}
 
 	return &Transfer{
-		amount:        amount,
-		destAddress:   destAddress,
-		privateKey:    privateKey,
-		srcClient:     commonSetup.l1Client,
+		logger:      logger,
+		amount:      amount,
+		destAddress: destAddress,
+		privateKey:  privateKey,
+		srcClient: shared.NewETHClient(
+			logger.With("component", "l1_eth_client"),
+			commonSetup.l1Client,
+		),
 		srcChainID:    commonSetup.l1ChainID,
 		srcTransactor: l1t,
 		srcFilterer:   l1f,
-		destClient:    commonSetup.settlementClient,
-		destFilterer:  sf,
-		destChainID:   commonSetup.settlementChainID,
+		destClient: shared.NewETHClient(
+			logger.With("component", "settlement_eth_client"),
+			commonSetup.settlementClient,
+		),
+		destFilterer: sf,
+		destChainID:  commonSetup.settlementChainID,
 	}, nil
 }
 
 func NewTransferToL1(
+	logger *slog.Logger,
 	amount *big.Int,
 	destAddress common.Address,
 	privateKey *ecdsa.PrivateKey,
@@ -88,7 +99,7 @@ func NewTransferToL1(
 	l1ContractAddr common.Address,
 	settlementContractAddr common.Address,
 ) (*Transfer, error) {
-	t := &Transfer{}
+	t := &Transfer{logger: logger}
 	commonSetup, err := t.getCommonSetup(privateKey, settlementRPCUrl, l1RPCUrl)
 	if err != nil {
 		return nil, err
@@ -108,16 +119,23 @@ func NewTransferToL1(
 	}
 
 	return &Transfer{
-		amount:        amount,
-		destAddress:   destAddress,
-		privateKey:    privateKey,
-		srcClient:     commonSetup.settlementClient,
+		logger:      logger,
+		amount:      amount,
+		destAddress: destAddress,
+		privateKey:  privateKey,
+		srcClient: shared.NewETHClient(
+			logger.With("component", "settlement_eth_client"),
+			commonSetup.settlementClient,
+		),
 		srcChainID:    commonSetup.settlementChainID,
 		srcTransactor: st,
 		srcFilterer:   sf,
-		destClient:    commonSetup.l1Client,
-		destFilterer:  l1f,
-		destChainID:   commonSetup.l1ChainID,
+		destClient: shared.NewETHClient(
+			logger.With("component", "l1_eth_client"),
+			commonSetup.l1Client,
+		),
+		destFilterer: l1f,
+		destChainID:  commonSetup.l1ChainID,
 	}, nil
 }
 
@@ -133,14 +151,13 @@ func (t *Transfer) getCommonSetup(
 	settlementRPCUrl string,
 	l1RPCUrl string,
 ) (*commonSetup, error) {
-
 	pubKey := &privateKey.PublicKey
 	pubKeyBytes := crypto.FromECDSAPub(pubKey)
 	hash := sha3.NewLegacyKeccak256()
 	hash.Write(pubKeyBytes[1:])
 	address := hash.Sum(nil)[12:]
 	valAddr := common.BytesToAddress(address)
-	log.Info().Msg("Signing address used for InitiateTransfer tx on source chain: " + valAddr.Hex())
+	t.logger.Info("signing address used for InitiateTransfer tx on source chain", "address", valAddr.Hex())
 
 	l1Client, err := ethclient.Dial(l1RPCUrl)
 	if err != nil {
@@ -150,7 +167,7 @@ func (t *Transfer) getCommonSetup(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get l1 chain id: %s", err)
 	}
-	log.Debug().Msg("L1 chain id: " + l1ChainID.String())
+	t.logger.Debug("L1 chain id", "chain_id", l1ChainID)
 
 	settlementClient, err := ethclient.Dial(settlementRPCUrl)
 	if err != nil {
@@ -160,7 +177,7 @@ func (t *Transfer) getCommonSetup(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get settlement chain id: %s", err)
 	}
-	log.Debug().Msg("Settlement chain id: " + settlementChainID.String())
+	t.logger.Debug("settlement chain id", "chain_id", settlementChainID)
 
 	return &commonSetup{
 		l1Client:          l1Client,
@@ -172,7 +189,7 @@ func (t *Transfer) getCommonSetup(
 
 func (t *Transfer) Start(ctx context.Context) error {
 
-	opts, err := shared.CreateTransactOpts(ctx, t.privateKey, t.srcChainID, t.srcClient)
+	opts, err := t.srcClient.CreateTransactOpts(ctx, t.privateKey, t.srcChainID)
 	if err != nil {
 		return fmt.Errorf("failed to get transact opts: %s", err)
 	}
@@ -200,13 +217,17 @@ func (t *Transfer) Start(ctx context.Context) error {
 		if err != nil {
 			return nil, fmt.Errorf("failed to initiate transfer: %s", err)
 		}
-		log.Debug().Msgf("Transfer initialization tx sent, hash: %s, srcChain: %s, recipient: %s, amount: %d",
-			tx.Hash().Hex(), t.srcChainID.String(), t.destAddress.Hex(), t.amount)
+		t.logger.Debug(
+			"transfer initialization tx sent",
+			"hash", tx.Hash().Hex(),
+			"src_chain", t.srcChainID,
+			"recipient", t.destAddress.Hex(),
+			"amount", t.amount,
+		)
 		return tx, nil
 	}
 
-	receipt, err := shared.WaitMinedWithRetry(
-		ctx, t.srcClient, opts, submitInitiateTransfer)
+	receipt, err := t.srcClient.WaitMinedWithRetry(ctx, opts, submitInitiateTransfer)
 	if err != nil {
 		return fmt.Errorf("failed to wait for initiate transfer tx to be mined: %s", err)
 	}
@@ -215,7 +236,7 @@ func (t *Transfer) Start(ctx context.Context) error {
 	if includedInBlock == math.MaxUint64 {
 		return fmt.Errorf("transfer initiation tx not included in block")
 	}
-	log.Info().Msgf("InitiateTransfer tx included in block: %d", includedInBlock)
+	t.logger.Info("initiateTransfer tx included in block", "block_number", includedInBlock)
 
 	// Obtain event on src chain, transfer idx needed for dest chain
 	event, err := t.srcFilterer.ObtainTransferInitiatedBySender(&bind.FilterOpts{
@@ -225,10 +246,15 @@ func (t *Transfer) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error obtaining transfer initiated event: %s", err)
 	}
-	log.Info().Msgf("InitiateTransfer event emitted on src chain: %s, recipient: %s, amount: %d, transferIdx: %d",
-		t.srcChainID.String(), event.Recipient, event.Amount, event.TransferIdx)
+	t.logger.Info(
+		"initiateTransfer event emitted",
+		"src_chain", t.srcChainID,
+		"recipient", event.Recipient,
+		"amount", event.Amount,
+		"transfer_idx", event.TransferIdx,
+	)
 
-	log.Debug().Msgf("Waiting for transfer finalization tx from relayer")
+	t.logger.Debug("waiting for transfer finalization tx from relayer")
 	timeoutSec := 60 * 30 // 30 minutes
 	countSec := 0
 	for {
@@ -244,8 +270,13 @@ func (t *Transfer) Start(ctx context.Context) error {
 			return fmt.Errorf("error obtaining transfer finalized event: %s", err)
 		}
 		if found {
-			log.Info().Msgf("Transfer finalized on dest chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
-				t.destChainID.String(), event.Recipient, event.Amount, event.CounterpartyIdx)
+			t.logger.Info(
+				"transfer finalized",
+				"dst_chain", t.destChainID,
+				"recipient", event.Recipient,
+				"amount", event.Amount,
+				"src_transfer_idx", event.CounterpartyIdx,
+			)
 			break
 		}
 		time.Sleep(time.Second)

@@ -4,19 +4,21 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"log/slog"
 	"math/big"
+
 	"standard-bridge/pkg/shared"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/rs/zerolog/log"
 )
 
 type Transactor struct {
+	logger            *slog.Logger
 	privateKey        *ecdsa.PrivateKey
-	rawClient         *ethclient.Client
+	rawClient         *shared.ETHClient
 	gatewayTransactor shared.GatewayTransactor
 	gatewayFilterer   shared.GatewayFilterer
 	chainID           *big.Int
@@ -35,6 +37,7 @@ func (m mostRecentFinalized) String() string {
 }
 
 func NewTransactor(
+	logger *slog.Logger,
 	pk *ecdsa.PrivateKey,
 	gatewayAddr common.Address,
 	ethClient *ethclient.Client,
@@ -43,8 +46,12 @@ func NewTransactor(
 	eventChan <-chan shared.TransferInitiatedEvent,
 ) *Transactor {
 	return &Transactor{
-		privateKey:        pk,
-		rawClient:         ethClient,
+		logger:     logger,
+		privateKey: pk,
+		rawClient: shared.NewETHClient(
+			logger.With("component", "eth_client"),
+			ethClient,
+		),
 		gatewayTransactor: gatewayTransactor,
 		gatewayFilterer:   gatewayFilterer,
 		eventChan:         eventChan,
@@ -55,27 +62,24 @@ func NewTransactor(
 	}
 }
 
-func (t *Transactor) Start(
-	ctx context.Context,
-) <-chan struct{} {
-
+func (t *Transactor) Start(ctx context.Context) (<-chan struct{}, error) {
 	var err error
 	t.chainID, err = t.rawClient.ChainID(ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get chain id")
+		return nil, fmt.Errorf("failed to get chain id: %w", err)
 	}
 	switch t.chainID.String() {
 	case "39999":
-		log.Info().Msg("Starting transactor for local_l1")
+		t.logger.Info("starting transactor for local_l1")
 		t.chain = shared.L1
 	case "17000":
-		log.Info().Msg("Starting transactor for Holesky L1")
+		t.logger.Info("starting transactor for Holesky L1")
 		t.chain = shared.L1
 	case "17864":
-		log.Info().Msg("Starting transactor for mev-commit chain (settlement)")
+		t.logger.Info("starting transactor for mev-commit chain (settlement)")
 		t.chain = shared.Settlement
 	default:
-		log.Fatal().Msgf("Unsupported chain id: %s", t.chainID.String())
+		return nil, fmt.Errorf("unsupported chain id: %s", t.chainID)
 	}
 
 	doneChan := make(chan struct{})
@@ -83,22 +87,29 @@ func (t *Transactor) Start(
 	go func() {
 		defer close(doneChan)
 
-		shared.CancelPendingTxes(ctx, t.privateKey, t.rawClient)
+		if err := t.rawClient.CancelPendingTxes(ctx, t.privateKey); err != nil {
+			t.logger.Error("failed to cancel pending transactions", "error", err)
+		}
 
 		for event := range t.eventChan {
-			log.Debug().Msgf("Received signal from listener to submit transfer finalization tx on dest chain: %s. "+
-				"Where Src chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
-				t.chain, event.Chain.String(), event.Recipient, event.Amount, event.TransferIdx)
-			opts, err := shared.CreateTransactOpts(ctx, t.privateKey, t.chainID, t.rawClient)
+			t.logger.Debug(
+				"received signal from listener to submit transfer finalization tx",
+				"dst_chain", t.chain,
+				"src_chain", event.Chain,
+				"recipient", event.Recipient,
+				"amount", event.Amount,
+				"src_transfer_idx", event.TransferIdx,
+			)
+			opts, err := t.rawClient.CreateTransactOpts(ctx, t.privateKey, t.chainID)
 			if err != nil {
-				log.Err(err).Msg("failed to create transact opts for transfer finalization tx.")
-				log.Warn().Msgf("skipping transfer finalization tx for src transfer idx: %d", event.TransferIdx)
+				t.logger.Error("failed to create transact opts for transfer finalization tx", "error", err)
+				t.logger.Warn("skipping transfer finalization tx", "src_transfer_idx", event.TransferIdx)
 				continue
 			}
 			finalized, err := t.transferAlreadyFinalized(ctx, event.TransferIdx)
 			if err != nil {
-				log.Err(err).Msg("failed to check if transfer already finalized.")
-				log.Warn().Msgf("skipping transfer finalization tx for src transfer idx: %d", event.TransferIdx)
+				t.logger.Error("failed to check if transfer already finalized")
+				t.logger.Warn("skipping transfer finalization tx", "src_transfer_idx", event.TransferIdx)
 				continue
 			}
 			if finalized {
@@ -106,8 +117,8 @@ func (t *Transactor) Start(
 			}
 			receipt, err := t.sendFinalizeTransfer(ctx, opts, event)
 			if err != nil {
-				log.Err(err).Msg("failed to send transfer finalization tx.")
-				log.Warn().Msgf("skipping transfer finalization tx for src transfer idx: %d", event.TransferIdx)
+				t.logger.Error("failed to send transfer finalization tx")
+				t.logger.Warn("skipping transfer finalization tx", "src_transfer_idx", event.TransferIdx)
 				continue
 			}
 			// Event should be obtainable to update cache
@@ -115,17 +126,17 @@ func (t *Transactor) Start(
 			filterOpts := &bind.FilterOpts{Start: eventBlock, End: &eventBlock, Context: ctx}
 			_, found, err := t.obtainTransferFinalizedAndUpdateCache(ctx, filterOpts, event.TransferIdx)
 			if err != nil {
-				log.Err(err).Msg("failed to obtain transfer finalized event after sending tx")
+				t.logger.Error("failed to obtain transfer finalized event after sending tx")
 				continue
 			}
 			if !found {
-				log.Warn().Msg("transfer finalized event not found after sending tx")
+				t.logger.Warn("transfer finalized event not found after sending tx")
 				continue
 			}
 		}
-		log.Info().Msgf("Chan to transactor was closed, transactor for chain %s is exiting", t.chain)
+		t.logger.Info("channel to transactor was closed, transactor is exiting", "chain", t.chain)
 	}()
-	return doneChan
+	return doneChan, nil
 }
 
 func (t *Transactor) transferAlreadyFinalized(
@@ -157,8 +168,13 @@ func (t *Transactor) transferAlreadyFinalized(
 			return false, fmt.Errorf("failed to obtain transfer finalized event: %w", err)
 		}
 		if found {
-			log.Debug().Msgf("Transfer already finalized on dest chain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
-				t.chain.String(), event.Recipient, event.Amount, event.CounterpartyIdx)
+			t.logger.Debug(
+				"transfer already finalized",
+				"dst_chain", t.chain,
+				"recipient", event.Recipient,
+				"amount", event.Amount,
+				"src_transfer_idx", event.CounterpartyIdx,
+			)
 			return true, nil
 		}
 	}
@@ -180,17 +196,22 @@ func (t *Transactor) sendFinalizeTransfer(
 		if err != nil {
 			return nil, fmt.Errorf("failed to send finalize transfer tx: %w", err)
 		}
-		log.Debug().Msgf("Transfer finalization tx sent, hash: %s, destChain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
-			tx.Hash().Hex(), t.chain.String(), event.Recipient, event.Amount, event.TransferIdx)
+		t.logger.Debug("transfer finalization tx sent, hash: %s, destChain: %s, recipient: %s, amount: %d, srcTransferIdx: %d",
+			"hash", tx.Hash().Hex(),
+			"dest_chain", t.chain,
+			"recipient", event.Recipient,
+			"amount", event.Amount,
+			"src_transfer_idx", event.TransferIdx,
+		)
 		return tx, nil
 	}
 
-	receipt, err := shared.WaitMinedWithRetry(ctx, t.rawClient, opts, submitFinalizeTransfer)
+	receipt, err := t.rawClient.WaitMinedWithRetry(ctx, opts, submitFinalizeTransfer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for finalize transfer tx to be mined: %w", err)
 	}
 	includedInBlock := receipt.BlockNumber.Uint64()
-	log.Info().Msgf("FinalizeTransfer tx included in block: %d on: %v", includedInBlock, t.chain.String())
+	t.logger.Info("finalizeTransfer tx included in block", "block_number", includedInBlock, "chain", t.chain)
 
 	return receipt, nil
 }
@@ -206,7 +227,7 @@ func (t *Transactor) obtainTransferFinalizedAndUpdateCache(
 	}
 	if found {
 		t.mostRecentFinalized = mostRecentFinalized{event, *opts}
-		log.Debug().Msgf("mostRecentFinalized cache updated: %+v", t.mostRecentFinalized)
+		t.logger.Debug("mostRecentFinalized cache updated", "new", fmt.Sprintf("%+v", t.mostRecentFinalized))
 	}
 	return event, found, nil
 }

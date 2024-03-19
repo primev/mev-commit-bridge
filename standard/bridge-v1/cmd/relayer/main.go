@@ -5,166 +5,170 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"standard-bridge/pkg/relayer"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
 
+	"standard-bridge/pkg/relayer"
+	"standard-bridge/pkg/util"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
-	"gopkg.in/yaml.v2"
+	"github.com/urfave/cli/v2/altsrc"
 )
 
 const (
-	defaultHTTPPort = 8080
+	defaultHTTPPort  = 8080
+	defaultConfigDir = "~/.mev-commit-bridge"
+	defaultKeyFile   = "key"
 )
 
 var (
 	optionConfig = &cli.StringFlag{
-		Name:     "config",
-		Usage:    "path to relayer config file",
-		Required: false, // Can also set config via env var
-		EnvVars:  []string{"STANDARD_BRIDGE_RELAYER_CONFIG"},
+		Name:    "config",
+		Usage:   "path to relayer config file",
+		EnvVars: []string{"STANDARD_BRIDGE_RELAYER_CONFIG"},
 	}
+
+	optionPrivKeyFile = altsrc.NewStringFlag(&cli.StringFlag{
+		Name:    "priv-key-file",
+		Usage:   "path to private key file",
+		EnvVars: []string{"STANDARD_BRIDGE_RELAYER_PRIV_KEY_FILE"},
+		Value:   filepath.Join(defaultConfigDir, defaultKeyFile),
+	})
+
+	optionLogFmt = altsrc.NewStringFlag(&cli.StringFlag{
+		Name:    "log-fmt",
+		Usage:   "log format to use, options are 'text' or 'json'",
+		EnvVars: []string{"STANDARD_BRIDGE_RELAYER_LOG_FMT"},
+		Value:   "text",
+		Action: func(_ *cli.Context, s string) error {
+			if !slices.Contains([]string{"text", "json"}, s) {
+				return fmt.Errorf("invalid value: -log-fmt=%q", s)
+			}
+			return nil
+		},
+	})
+
+	optionLogLevel = altsrc.NewStringFlag(&cli.StringFlag{
+		Name:    "log-level",
+		Usage:   "log level to use, options are 'debug', 'info', 'warn', 'error'",
+		EnvVars: []string{"STANDARD_BRIDGE_RELAYER_LOG_LEVEL"},
+		Value:   "info",
+		Action: func(_ *cli.Context, s string) error {
+			if !slices.Contains([]string{"debug", "info", "warn", "error"}, s) {
+				return fmt.Errorf("invalid value: -log-level=%q", s)
+			}
+			return nil
+		},
+	})
+
+	optionLogTags = altsrc.NewStringFlag(&cli.StringFlag{
+		Name:    "log-tags",
+		Usage:   "log tags is a comma-separated list of <name:value> pairs that will be inserted into each log line",
+		EnvVars: []string{"STANDARD_BRIDGE_RELAYER_LOG_TAGS"},
+		Action: func(ctx *cli.Context, s string) error {
+			for i, p := range strings.Split(s, ",") {
+				if len(strings.Split(p, ":")) != 2 {
+					return fmt.Errorf("invalid log-tags at index %d, expecting <name:value>", i)
+				}
+			}
+			return nil
+		},
+	})
+
+	optionL1RPCUrl = altsrc.NewStringFlag(&cli.StringFlag{
+		Name:    "l1-rpc-url",
+		Usage:   "URL for L1 RPC",
+		EnvVars: []string{"STANDARD_BRIDGE_RELAYER_L1_RPC_URL"},
+	})
+
+	optionSettlementRPCUrl = altsrc.NewStringFlag(&cli.StringFlag{
+		Name:    "settlement-rpc-url",
+		Usage:   "URL for settlement RPC",
+		EnvVars: []string{"STANDARD_BRIDGE_RELAYER_SETTLEMENT_RPC_URL"},
+		Value:   "http://localhost:8545",
+	})
+
+	optionL1ContractAddr = altsrc.NewStringFlag(&cli.StringFlag{
+		Name:    "l1-contract-addr",
+		Usage:   "address of the L1 gateway contract",
+		EnvVars: []string{"STANDARD_BRIDGE_RELAYER_L1_CONTRACT_ADDR"},
+	})
+
+	optionSettlementContractAddr = altsrc.NewStringFlag(&cli.StringFlag{
+		Name:    "settlement-contract-addr",
+		Usage:   "address of the settlement gateway contract",
+		EnvVars: []string{"STANDARD_BRIDGE_RELAYER_SETTLEMENT_CONTRACT_ADDR"},
+	})
 )
 
 func main() {
+	flags := []cli.Flag{
+		optionConfig,
+		optionPrivKeyFile,
+		optionLogFmt,
+		optionLogLevel,
+		optionLogTags,
+		optionL1RPCUrl,
+		optionSettlementRPCUrl,
+		optionL1ContractAddr,
+		optionSettlementContractAddr,
+	}
+
 	app := &cli.App{
 		Name:  "standard-bridge-relayer",
 		Usage: "Entry point for relayer of mev-commit standard bridge",
-		Commands: []*cli.Command{
-			{
-				Name:  "start",
-				Usage: "Start standard bridge relayer",
-				Flags: []cli.Flag{
-					optionConfig,
-				},
-				Action: func(c *cli.Context) error {
-					return start(c)
-				},
-			},
-		}}
+		Commands: []*cli.Command{{
+			Name:   "start",
+			Usage:  "Start standard bridge relayer",
+			Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewYamlSourceFromFlagFunc(optionConfig.Name)),
+			Flags:  flags,
+			Action: start,
+		}},
+	}
 
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintf(app.Writer, "exited with error: %v\n", err)
 	}
 }
 
-func loadConfigFromEnv() config {
-	cfg := config{
-		PrivKeyFilePath:        os.Getenv("PRIVATE_KEY_FILE_PATH"),
-		LogLevel:               os.Getenv("LOG_LEVEL"),
-		L1RPCUrl:               os.Getenv("L1_RPC_URL"),
-		SettlementRPCUrl:       os.Getenv("SETTLEMENT_RPC_URL"),
-		L1ContractAddr:         os.Getenv("L1_CONTRACT_ADDR"),
-		SettlementContractAddr: os.Getenv("SETTLEMENT_CONTRACT_ADDR"),
-	}
-	return cfg
-}
-
-func loadConfigFromFile(cfg *config, filePath string) error {
-	buf, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read config file at: %s, %w", filePath, err)
-	}
-	if err := yaml.Unmarshal(buf, cfg); err != nil {
-		return fmt.Errorf("failed to unmarshal config file at: %s, %w", filePath, err)
-	}
-	return nil
-}
-
-func setupLogging(logLevel string) {
-	lvl, err := zerolog.ParseLevel(logLevel)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to parse log level")
-	}
-	zerolog.SetGlobalLevel(lvl)
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	log.Logger = log.Output(os.Stdout).With().Caller().Logger()
-}
-
-type config struct {
-	PrivKeyFilePath        string `yaml:"priv_key_file_path" json:"priv_key_file_path"`
-	LogLevel               string `yaml:"log_level" json:"log_level"`
-	L1RPCUrl               string `yaml:"l1_rpc_url" json:"l1_rpc_url"`
-	SettlementRPCUrl       string `yaml:"settlement_rpc_url" json:"settlement_rpc_url"`
-	L1ContractAddr         string `yaml:"l1_contract_addr" json:"l1_contract_addr"`
-	SettlementContractAddr string `yaml:"settlement_contract_addr" json:"settlement_contract_addr"`
-}
-
-func checkConfig(cfg *config) error {
-	if cfg.PrivKeyFilePath == "" {
-		return fmt.Errorf("priv_key_file_path is required")
-	}
-
-	if cfg.LogLevel == "" {
-		cfg.LogLevel = "info"
-	}
-
-	if cfg.L1RPCUrl == "" {
-		return fmt.Errorf("l1_rpc_url is required")
-	}
-
-	if cfg.SettlementRPCUrl == "" {
-		return fmt.Errorf("settlement_rpc_url is required")
-	}
-
-	if cfg.L1ContractAddr == "" {
-		return fmt.Errorf("oracle_contract_addr is required")
-	}
-
-	if cfg.SettlementContractAddr == "" {
-		return fmt.Errorf("preconf_contract_addr is required")
-	}
-
-	return nil
-}
-
+// start is the entrypoint of the cli app.
 func start(c *cli.Context) error {
-	cfg := loadConfigFromEnv()
-
-	configFilePath := c.String(optionConfig.Name)
-	if configFilePath == "" {
-		log.Info().Msg("env var config will be used")
-	} else {
-		log.Info().Str("config_file", configFilePath).Msg(
-			"overriding env var config with file")
-		if err := loadConfigFromFile(&cfg, configFilePath); err != nil {
-			log.Fatal().Err(err).Msg("failed to load config provided as file")
-		}
-	}
-
-	if err := checkConfig(&cfg); err != nil {
-		log.Fatal().Err(err).Msg("invalid config")
-	}
-
-	setupLogging(cfg.LogLevel)
-
-	privKeyFilePath := cfg.PrivKeyFilePath
-
-	if strings.HasPrefix(privKeyFilePath, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			log.Err(err).Msg("failed to get user home dir")
-		}
-		privKeyFilePath = filepath.Join(homeDir, privKeyFilePath[2:])
-	}
-
-	privKey, err := crypto.LoadECDSA(privKeyFilePath)
+	logger, err := util.NewLogger(
+		c.String(optionLogLevel.Name),
+		c.String(optionLogFmt.Name),
+		c.String(optionLogTags.Name),
+		c.App.Writer,
+	)
 	if err != nil {
-		log.Err(err).Msg("failed to load private key")
+		return fmt.Errorf("failed to create logger: %w", err)
 	}
 
-	r := relayer.NewRelayer(&relayer.Options{
+	privKeyFile, err := resolveFilePath(c.String(optionPrivKeyFile.Name))
+	if err != nil {
+		return fmt.Errorf("failed to get private key file path: %w", err)
+	}
+
+	privKey, err := crypto.LoadECDSA(privKeyFile)
+	if err != nil {
+		return fmt.Errorf("failed to load private key: %w", err)
+	}
+
+	r, err := relayer.NewRelayer(&relayer.Options{
+		Ctx:                    c.Context,
+		Logger:                 logger.With("component", "relayer"),
 		PrivateKey:             privKey,
-		L1RPCUrl:               cfg.L1RPCUrl,
-		SettlementRPCUrl:       cfg.SettlementRPCUrl,
-		L1ContractAddr:         common.HexToAddress(cfg.L1ContractAddr),
-		SettlementContractAddr: common.HexToAddress(cfg.SettlementContractAddr),
+		L1RPCUrl:               c.String(optionL1RPCUrl.Name),
+		SettlementRPCUrl:       c.String(optionSettlementRPCUrl.Name),
+		L1ContractAddr:         common.HexToAddress(c.String(optionL1ContractAddr.Name)),
+		SettlementContractAddr: common.HexToAddress(c.String(optionSettlementContractAddr.Name)),
 	})
+	if err != nil {
+		return err
+	}
 
 	interruptSigChan := make(chan os.Signal, 1)
 	signal.Notify(interruptSigChan, os.Interrupt, syscall.SIGTERM)
@@ -174,7 +178,7 @@ func start(c *cli.Context) error {
 	case <-interruptSigChan:
 	case <-c.Done():
 	}
-	fmt.Fprintf(c.App.Writer, "shutting down...\n")
+	logger.Info("shutting down...")
 
 	closedAllSuccessfully := make(chan struct{})
 	go func() {
@@ -182,14 +186,31 @@ func start(c *cli.Context) error {
 
 		err := r.TryCloseAll()
 		if err != nil {
-			log.Error().Err(err).Msg("failed to close all routines and db connection")
+			logger.Error("failed to close all routines and db connection", "error", err)
 		}
 	}()
 	select {
 	case <-closedAllSuccessfully:
 	case <-time.After(5 * time.Second):
-		log.Error().Msg("failed to close all in time")
+		logger.Error("failed to close all in time", "error", err)
 	}
 
 	return nil
+}
+
+func resolveFilePath(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("path is empty")
+	}
+
+	if strings.HasPrefix(path, "~") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+
+		return filepath.Join(home, path[1:]), nil
+	}
+
+	return path, nil
 }
